@@ -2,6 +2,10 @@
 
 This file is the working guide for AI agents and contributors in this repository. Follow it unless a newer user instruction explicitly overrides it.
 
+## Branch and Deploy Model
+
+See `README.md` for the canonical workflow and deployment model. In short: feature branches branch off `dev`, PRs target `dev`, and release PRs go `dev` → `main`. Render staging is `https://verbilo-backend-staging.onrender.com`.
+
 ## Project Context
 
 - App: Verbilo, a multi-tenant intranet SaaS for UK dental group practices.
