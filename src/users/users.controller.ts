@@ -20,6 +20,7 @@ export class UsersController {
     const cognitoId = request.user.sub;
     const user = await this.prisma.user.findUnique({
       where: { cognitoId },
+      include: { tenant: true, site: true },
     });
 
     if (!user) {
