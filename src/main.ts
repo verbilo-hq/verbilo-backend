@@ -1,6 +1,11 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
+type CorsOriginCallback = (error: Error | null, allow?: boolean) => void;
+
+const VERBILO_SUBDOMAIN_ORIGIN_PATTERN =
+  /^https:\/\/[a-z0-9-]+\.verbilo\.co\.uk$/;
+
 function normalizeOrigin(origin: string) {
   return origin.trim().replace(/\/+$/, '');
 }
@@ -17,10 +22,25 @@ function getCorsOrigins() {
     .filter(Boolean);
 }
 
+function isAllowedCorsOrigin(origin: string | undefined) {
+  if (!origin) {
+    return true;
+  }
+
+  const normalizedOrigin = normalizeOrigin(origin);
+
+  return (
+    getCorsOrigins().includes(normalizedOrigin) ||
+    VERBILO_SUBDOMAIN_ORIGIN_PATTERN.test(normalizedOrigin)
+  );
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   app.enableCors({
-    origin: getCorsOrigins(),
+    origin(origin: string | undefined, callback: CorsOriginCallback) {
+      callback(null, isAllowedCorsOrigin(origin));
+    },
   });
   await app.listen(process.env.PORT ?? 3000);
 }

@@ -8,11 +8,16 @@ datasource db {
 }
 
 model Tenant {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  createdAt DateTime @default(now())
-  sites     Site[]
-  users     User[]
+  id             String    @id @default(uuid()) @db.Uuid
+  name           String
+  slug           String    @unique
+  sector         String    @default("dental")
+  enabledModules String[]  @default([])
+  settings       Json      @default("{}")
+  archivedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  sites          Site[]
+  users          User[]
 }
 
 model Site {
@@ -29,7 +34,22 @@ model User {
   cognitoId String   @unique
   tenantId  String   @db.Uuid
   siteId    String?  @db.Uuid
+  role      String   @default("employee")
   tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   site      Site?    @relation(fields: [siteId], references: [id])
   createdAt DateTime @default(now())
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String?  @db.Uuid
+  tenantId    String?  @db.Uuid
+  action      String
+  entityType  String
+  entityId    String?
+  payloadJson Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([actorUserId, createdAt(sort: Desc)])
 }
