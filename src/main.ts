@@ -1,6 +1,13 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
+type CorsOriginCallback = (error: Error | null, allow?: boolean) => void;
+
+const VERBILO_SUBDOMAIN_ORIGIN_PATTERN =
+  /^https:\/\/[a-z0-9-]+\.verbilo\.co\.uk$/;
+const STAGING_SUBDOMAIN_ORIGIN_PATTERN =
+  /^https:\/\/[a-z0-9-]+\.staging\.verbilo\.co\.uk$/;
+
 function normalizeOrigin(origin: string) {
   return origin.trim().replace(/\/+$/, '');
 }
@@ -18,28 +25,25 @@ function getCorsOrigins() {
     .filter(Boolean);
 }
 
+function isAllowedCorsOrigin(origin: string | undefined) {
+  if (!origin) {
+    return true;
+  }
+
+  const normalizedOrigin = normalizeOrigin(origin);
+
+  return (
+    getCorsOrigins().includes(normalizedOrigin) ||
+    VERBILO_SUBDOMAIN_ORIGIN_PATTERN.test(normalizedOrigin) ||
+    STAGING_SUBDOMAIN_ORIGIN_PATTERN.test(normalizedOrigin)
+  );
+}
+
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const corsOrigins = getCorsOrigins();
-  const prodTenantOriginRegex = /^https:\/\/[a-z0-9-]+\.verbilo\.co\.uk$/;
-  const stagingTenantOriginRegex = /^https:\/\/[a-z0-9-]+\.staging\.verbilo\.co\.uk$/;
   app.enableCors({
-    origin: (
-      origin: string | undefined,
-      callback: (err: Error | null, allow?: boolean) => void,
-    ) => {
-      if (!origin) {
-        callback(null, true);
-        return;
-      }
-
-      const normalizedOrigin = normalizeOrigin(origin);
-      const isAllowed =
-        corsOrigins.includes(normalizedOrigin) ||
-        prodTenantOriginRegex.test(normalizedOrigin) ||
-        stagingTenantOriginRegex.test(normalizedOrigin);
-
-      callback(isAllowed ? null : new Error('Not allowed by CORS'), isAllowed);
+    origin(origin: string | undefined, callback: CorsOriginCallback) {
+      callback(null, isAllowedCorsOrigin(origin));
     },
   });
   await app.listen(process.env.PORT ?? 3000);

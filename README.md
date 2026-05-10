@@ -24,13 +24,15 @@ npm run start:dev
 
 ## Environment variables
 
-See `.env.example` for the complete list (including optional variables). Required for a working local dev server:
+- `DATABASE_URL` — PostgreSQL connection string for the Neon database.
+- `COGNITO_USER_POOL_ID` — AWS Cognito user pool ID used to validate JWTs.
+- `COGNITO_CLIENT_ID` — AWS Cognito app client ID for the application.
+- `AWS_REGION` — AWS region where the Cognito user pool is hosted.
+- `FRONTEND_URL` — Frontend origin allowed by backend CORS.
+- `FRONTEND_URLS` — Optional comma-separated extra allowed origins.
+- `SENTRY_DSN` — Optional Sentry DSN (Sentry SDK not yet wired — see VER-15 / VER-35).
 
-- `DATABASE_URL`
-- `AWS_REGION`
-- `COGNITO_USER_POOL_ID`
-- `COGNITO_CLIENT_ID`
-- `FRONTEND_URL`
+See `.env.example` for the full list (including optional variables).
 
 ## Tenant model
 
@@ -40,7 +42,27 @@ At the database level:
 - `User` belongs to a `Tenant` and may optionally belong to a `Site`.
 - The Cognito `sub` claim is stored as `User.cognitoId` and is the lookup key for `GET /users/me`.
 
-At the frontend routing level (and corresponding backend CORS policy):
+Verbilo uses three web surfaces:
+
+- `verbilo.co.uk` for the public landing site.
+- `admin.verbilo.co.uk` for the internal Verbilo admin portal.
+- `{slug}.verbilo.co.uk` for tenant portals.
+
+Tenant portals send `X-Tenant-Slug` on tenant-scoped API requests. The backend resolves that slug to a tenant context and tenant-scoped queries must still filter by the resolved tenant id server-side.
+
+Admin tenant endpoints, protected by Verbilo support/super-admin roles:
+
+- `POST /admin/tenants`
+- `GET /admin/tenants`
+- `GET /admin/tenants/check-slug?slug=foo`
+- `GET /admin/tenants/:id`
+- `PATCH /admin/tenants/:id`
+
+Public tenant bootstrap:
+
+- `GET /tenants/by-slug/:slug`
+
+Routing-level surfaces (and the corresponding backend CORS policy):
 
 - Production tenant surfaces use `https://<tenant-slug>.verbilo.co.uk`.
 - Staging tenant surfaces use `https://<tenant-slug>.staging.verbilo.co.uk`.
@@ -60,7 +82,7 @@ Working convention:
 2. Open a PR targeting `dev` (default). Merge → Render redeploys staging.
 3. Open a release PR `dev` → `main`. Merge → Render redeploys production.
 
-Note: `verbilo-backend-staging` shares the same Neon DB and Cognito pool as production for now. Plan to split before first paying tenant (tracked separately).
+Note: `verbilo-backend-staging` shares the same Cognito pool as production. The Neon staging branch is separate (`verbilo-dev` → `staging` branch).
 
 ## Branch protection
 
