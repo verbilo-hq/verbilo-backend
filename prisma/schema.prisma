@@ -1,0 +1,34 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Tenant {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  createdAt DateTime @default(now())
+  sites     Site[]
+  users     User[]
+}
+
+model Site {
+  id       String @id @default(uuid()) @db.Uuid
+  name     String
+  tenantId String @db.Uuid
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users    User[]
+}
+
+model User {
+  id        String   @id @default(uuid()) @db.Uuid
+  username  String   @unique
+  cognitoId String   @unique
+  tenantId  String   @db.Uuid
+  siteId    String?  @db.Uuid
+  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site      Site?    @relation(fields: [siteId], references: [id])
+  createdAt DateTime @default(now())
+}
