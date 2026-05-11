@@ -10,6 +10,10 @@
 // upserts a User row paired to that tenant (default: SmileCo). Use
 // `SEED_TENANT_SLUG` to pair to a different tenant — e.g. for testing
 // a vet practice flow.
+//
+// Platform admin roles (`verbilo_super_admin`, `verbilo_support`) no
+// longer require (or create) a sentinel tenant: they are seeded with
+// `tenantId: null` and `siteId: null` (VER-51).
 
 import { PrismaClient } from '@prisma/client';
 import { normalizeSlug } from '../src/common/slug';
@@ -99,36 +103,6 @@ async function seedCognitoUser(targetSlug: string) {
     return;
   }
 
-  // Look up the target tenant. If SEED_TENANT_SLUG is explicit AND not found,
-  // auto-create it with the optional SEED_TENANT_NAME / SEED_TENANT_SECTOR
-  // env vars — this is how we provision internal-admin sentinel tenants
-  // (e.g. "verbilo-hq") without dragging them into the demo set.
-  let tenant = await prisma.tenant.findUnique({ where: { slug: targetSlug } });
-  if (!tenant) {
-    const explicitSlug = process.env.SEED_TENANT_SLUG;
-    if (explicitSlug && explicitSlug === targetSlug) {
-      const name = process.env.SEED_TENANT_NAME ?? explicitSlug;
-      const sector = (process.env.SEED_TENANT_SECTOR ?? 'other') as
-        | 'dental' | 'gp' | 'vets' | 'physio' | 'optometry' | 'other' | 'healthcare';
-      tenant = await prisma.tenant.create({
-        data: { slug: explicitSlug, name, sector, enabledModules: [] },
-      });
-      console.log(
-        `[seed] ✓ created target tenant (didn't exist): ${tenant.slug} (${tenant.sector})`,
-      );
-    } else {
-      tenant = await prisma.tenant.findFirst();
-    }
-  }
-  if (!tenant) {
-    throw new Error('No tenant available to pair the user to.');
-  }
-
-  const site = await prisma.site.findFirst({
-    where: { tenantId: tenant.id },
-    orderBy: { name: 'asc' },
-  });
-
   // Optional role override (SEED_ROLE) — useful for seeding internal admin
   // accounts that need to span tenants (e.g. verbilo_super_admin). When not
   // set, leaves the existing row's role untouched on update and falls back
@@ -144,25 +118,77 @@ async function seedCognitoUser(targetSlug: string) {
     role = seedRole;
   }
 
+  const isPlatformAdminSeedRole =
+    role === 'verbilo_super_admin' || role === 'verbilo_support';
+
+  // Look up the target tenant. If SEED_TENANT_SLUG is explicit AND not found,
+  // auto-create it with the optional SEED_TENANT_NAME / SEED_TENANT_SECTOR
+  // env vars (backward compat for env-pinned staging/local flows).
+  //
+  // Note: platform admin roles do not pair to (or create) a tenant anymore (VER-51).
+  let tenant = isPlatformAdminSeedRole
+    ? null
+    : await prisma.tenant.findUnique({ where: { slug: targetSlug } });
+  if (!tenant && !isPlatformAdminSeedRole) {
+    const explicitSlug = process.env.SEED_TENANT_SLUG;
+    if (explicitSlug && explicitSlug === targetSlug) {
+      const name = process.env.SEED_TENANT_NAME ?? explicitSlug;
+      const sector = (process.env.SEED_TENANT_SECTOR ?? 'other') as
+        | 'dental'
+        | 'gp'
+        | 'vets'
+        | 'physio'
+        | 'optometry'
+        | 'other'
+        | 'healthcare';
+      tenant = await prisma.tenant.create({
+        data: { slug: explicitSlug, name, sector, enabledModules: [] },
+      });
+      console.log(
+        `[seed] ✓ created target tenant (didn't exist): ${tenant.slug} (${tenant.sector})`,
+      );
+    } else {
+      tenant = await prisma.tenant.findFirst();
+    }
+  }
+  if (!tenant && !isPlatformAdminSeedRole) {
+    throw new Error('No tenant available to pair the user to.');
+  }
+
+  const site =
+    tenant && !isPlatformAdminSeedRole
+      ? await prisma.site.findFirst({
+          where: { tenantId: tenant.id },
+          orderBy: { name: 'asc' },
+        })
+      : null;
+
   const user = await prisma.user.upsert({
     where: { cognitoId: cognitoSub },
     update: {
       username,
-      tenantId: tenant.id,
-      siteId: site?.id ?? null,
+      tenantId: isPlatformAdminSeedRole ? null : tenant!.id,
+      siteId: isPlatformAdminSeedRole ? null : site?.id ?? null,
       ...(role ? { role } : {}),
     },
     create: {
       username,
       cognitoId: cognitoSub,
-      tenantId: tenant.id,
-      siteId: site?.id ?? null,
+      tenantId: isPlatformAdminSeedRole ? null : tenant!.id,
+      siteId: isPlatformAdminSeedRole ? null : site?.id ?? null,
       ...(role ? { role } : {}),
     },
   });
 
+  if (isPlatformAdminSeedRole) {
+    console.log(
+      `[seed] ✓ platform admin seeded: id=${user.id} role=${user.role} (tenantId=null)`,
+    );
+    return;
+  }
+
   console.log(
-    `[seed] ✓ user paired: id=${user.id} role=${user.role} → ${tenant.slug} (${tenant.sector})`,
+    `[seed] ✓ user paired: id=${user.id} role=${user.role} → ${tenant!.slug} (${tenant!.sector})`,
   );
 }
 

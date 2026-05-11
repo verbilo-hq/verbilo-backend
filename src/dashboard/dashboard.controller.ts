@@ -1,5 +1,6 @@
 import {
   Controller,
+  ForbiddenException,
   Get,
   NotFoundException,
   Req,
@@ -38,6 +39,12 @@ export class DashboardController {
       throw new NotFoundException('User not found');
     }
 
+    if (!user.tenantId) {
+      throw new ForbiddenException(
+        'Platform admin must act on a specific tenant context',
+      );
+    }
+
     const summary = await this.dashboardService.getSummary(
       user.tenantId,
       user.siteId,
@@ -48,4 +55,3 @@ export class DashboardController {
     });
   }
 }
-

@@ -92,5 +92,27 @@ describe('UserMeDto', () => {
       site: null,
     });
   });
-});
 
+  it('preserves tenant: null for platform admins', () => {
+    const fullPrismaUser = {
+      id: 'u_123',
+      username: 'alice',
+      role: 'verbilo_super_admin',
+      tenant: null,
+      site: null,
+    };
+
+    const dto = plainToInstance(UserMeDto, fullPrismaUser, {
+      excludeExtraneousValues: true,
+    });
+
+    expect(dto.tenant).toBeNull();
+    expect(dto).toEqual({
+      id: 'u_123',
+      username: 'alice',
+      role: 'verbilo_super_admin',
+      tenant: null,
+      site: null,
+    });
+  });
+});
