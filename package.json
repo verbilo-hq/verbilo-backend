@@ -30,6 +30,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@prisma/client": "^6.19.3",
     "@sentry/nestjs": "^10.52.0",
+    "helmet": "^8.1.0",
     "jwks-rsa": "^4.0.1",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
