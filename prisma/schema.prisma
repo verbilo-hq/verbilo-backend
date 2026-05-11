@@ -7,6 +7,15 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum AppointmentStatus {
+  scheduled
+  confirmed
+  in_progress
+  completed
+  no_show
+  cancelled
+}
+
 model Tenant {
   id             String    @id @default(uuid()) @db.Uuid
   name           String
@@ -18,26 +27,75 @@ model Tenant {
   createdAt      DateTime  @default(now())
   sites          Site[]
   users          User[]
+  patients       Patient[]
 }
 
 model Site {
-  id       String @id @default(uuid()) @db.Uuid
-  name     String
-  tenantId String @db.Uuid
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  users    User[]
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String
+  tenantId     String        @db.Uuid
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users        User[]
+  patients     Patient[]
+  appointments Appointment[]
 }
 
 model User {
-  id        String   @id @default(uuid()) @db.Uuid
-  username  String   @unique
-  cognitoId String   @unique
-  tenantId  String   @db.Uuid
-  siteId    String?  @db.Uuid
-  role      String   @default("employee")
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  site      Site?    @relation(fields: [siteId], references: [id])
-  createdAt DateTime @default(now())
+  id                    String        @id @default(uuid()) @db.Uuid
+  username              String        @unique
+  cognitoId             String        @unique
+  tenantId              String        @db.Uuid
+  siteId                String?       @db.Uuid
+  role                  String        @default("employee")
+  tenant                Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site                  Site?         @relation(fields: [siteId], references: [id])
+  createdAt             DateTime      @default(now())
+  appointmentsAsDentist Appointment[]
+}
+
+model Patient {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  siteId       String   @db.Uuid
+  nhsNumber    String?
+  dateOfBirth  DateTime @db.Date
+  firstName    String
+  surname      String
+  middleNames  String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  postcode     String?
+  registeredGp String?
+  allergies    Json     @default("[]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site         Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@index([tenantId, siteId, surname])
+}
+
+model Appointment {
+  id        String            @id @default(uuid()) @db.Uuid
+  patientId String            @db.Uuid
+  siteId    String            @db.Uuid
+  dentistId String            @db.Uuid
+  startsAt  DateTime
+  endsAt    DateTime
+  status    AppointmentStatus @default(scheduled)
+  notes     String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  site    Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  // TODO: when StaffMember lands (VER-23), switch this FK.
+  dentist User    @relation(fields: [dentistId], references: [id])
+
+  @@index([siteId, startsAt])
 }
 
 model AuditLog {

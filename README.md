@@ -45,6 +45,8 @@ At the database level:
 - `Tenant` has many `Site`s and `User`s.
 - `User` belongs to a `Tenant` and may optionally belong to a `Site`.
 - The Cognito `sub` claim is stored as `User.cognitoId` and is the lookup key for `GET /users/me`.
+- `Patient` belongs to a `Tenant` and a `Site` (both cascade-delete), with NHS number, DOB, registered GP, and a JSONB allergies array. Indexed on `(tenantId, siteId, surname)` for the typical search pattern.
+- `Appointment` references `Patient`, `Site`, and a `User` for the dentist (`AppointmentStatus` enum: `scheduled / confirmed / in_progress / completed / no_show / cancelled`). Indexed on `(siteId, startsAt)` for day-view queries. The `dentistId` FK will move to `StaffMember` once VER-23 ships.
 
 Verbilo uses three web surfaces:
 
