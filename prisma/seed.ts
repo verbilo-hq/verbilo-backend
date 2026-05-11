@@ -183,12 +183,25 @@ async function maybeSeedFromLegacyEnv() {
 }
 
 async function main() {
-  console.log(`[seed] upserting ${DEMO_TENANTS.length} demo tenants…`);
-  for (const t of DEMO_TENANTS) {
-    const tenant = await upsertDemoTenant(t);
+  // Skip the four demo tenants when staging has been narrowed to a single
+  // test tenant (see `prisma/reset-staging.ts`) — otherwise re-running the
+  // seed to pair an admin user re-creates the demos and undoes the reset.
+  // Defaults to "no": demos are upserted unless SEED_SKIP_DEMOS=1.
+  const skipDemos = ['1', 'true', 'yes'].includes(
+    (process.env.SEED_SKIP_DEMOS ?? '').toLowerCase(),
+  );
+  if (skipDemos) {
     console.log(
-      `[seed] ✓ ${tenant.slug.padEnd(20)} (${tenant.sector.padEnd(10)}) ${tenant.name}`,
+      `[seed] SEED_SKIP_DEMOS set — skipping demo tenant upserts.`,
     );
+  } else {
+    console.log(`[seed] upserting ${DEMO_TENANTS.length} demo tenants…`);
+    for (const t of DEMO_TENANTS) {
+      const tenant = await upsertDemoTenant(t);
+      console.log(
+        `[seed] ✓ ${tenant.slug.padEnd(20)} (${tenant.sector.padEnd(10)}) ${tenant.name}`,
+      );
+    }
   }
 
   const legacySlug = await maybeSeedFromLegacyEnv();
