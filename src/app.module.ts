@@ -18,6 +18,7 @@ import { TenantContextMiddleware } from './common/tenant-context.middleware';
 import { TenantsModule } from './tenants/tenants.module';
 import { AppConfigModule } from './config/config.module';
 import { HealthModule } from './health/health.module';
+import { StaffModule } from './staff/staff.module';
 
 @Module({
   imports: [
@@ -27,6 +28,7 @@ import { HealthModule } from './health/health.module';
     AuditModule,
     UsersModule,
     TenantsModule,
+    StaffModule,
     HealthModule,
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 60 }]),
   ],

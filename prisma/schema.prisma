@@ -16,18 +16,28 @@ enum AppointmentStatus {
   cancelled
 }
 
+enum StaffRole {
+  admin
+  manager
+  dentist
+  hygienist
+  nurse
+  receptionist
+}
+
 model Tenant {
-  id             String    @id @default(uuid()) @db.Uuid
+  id             String        @id @default(uuid()) @db.Uuid
   name           String
-  slug           String    @unique
-  sector         String    @default("dental")
-  enabledModules String[]  @default([])
-  settings       Json      @default("{}")
+  slug           String        @unique
+  sector         String        @default("dental")
+  enabledModules String[]      @default([])
+  settings       Json          @default("{}")
   archivedAt     DateTime?
-  createdAt      DateTime  @default(now())
+  createdAt      DateTime      @default(now())
   sites          Site[]
   users          User[]
   patients       Patient[]
+  staff          StaffMember[]
 }
 
 model Site {
@@ -38,6 +48,7 @@ model Site {
   users        User[]
   patients     Patient[]
   appointments Appointment[]
+  staff        StaffMember[]
 }
 
 model User {
@@ -51,6 +62,7 @@ model User {
   site                  Site?         @relation(fields: [siteId], references: [id])
   createdAt             DateTime      @default(now())
   appointmentsAsDentist Appointment[]
+  staffMember           StaffMember?
 }
 
 model Patient {
@@ -96,6 +108,32 @@ model Appointment {
   dentist User    @relation(fields: [dentistId], references: [id])
 
   @@index([siteId, startsAt])
+}
+
+model StaffMember {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  siteId     String?   @db.Uuid
+  userId     String?   @unique @db.Uuid
+  firstName  String
+  surname    String
+  email      String
+  phone      String?
+  role       StaffRole
+  gdcNumber  String?
+  startedAt  DateTime?
+  endedAt    DateTime?
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site?  @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, email])
+  @@index([tenantId, surname])
+  @@index([tenantId, siteId])
 }
 
 model AuditLog {
