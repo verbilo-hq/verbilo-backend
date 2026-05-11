@@ -4,6 +4,7 @@ import {
   Get,
   ServiceUnavailableException,
 } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { Env } from '../config/env.schema';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -22,6 +23,7 @@ export class HealthController {
   ) {}
 
   @Get()
+  @SkipThrottle({ default: true })
   async getHealth(): Promise<HealthResponse> {
     const uptime = Math.round(process.uptime());
     const version =
