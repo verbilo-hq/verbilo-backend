@@ -12,6 +12,7 @@ import {
   isValidSlug,
   normalizeSlug,
 } from '../common/slug';
+import { Route53DomainsClient } from '../integrations/aws/route53.client';
 import { VercelDomainsClient } from '../integrations/vercel/vercel-domains.client';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -44,6 +45,7 @@ export class TenantsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly vercelDomains: VercelDomainsClient,
+    private readonly route53Domains: Route53DomainsClient,
   ) {}
 
   async createTenant(input: CreateTenantInput, actorUserId?: string) {
@@ -52,7 +54,8 @@ export class TenantsService {
     // Defaults to 'healthcare' (sector-agnostic) when none is provided — see
     // VER-47. The CreateTenantDto requires sector at the API boundary; this
     // fallback only fires for non-HTTP callers (e.g. seeds, internal tooling).
-    const sector = this.readOptionalString(input.sector, 'sector') ?? 'healthcare';
+    const sector =
+      this.readOptionalString(input.sector, 'sector') ?? 'healthcare';
     const enabledModules = this.readEnabledModules(input.enabledModules) ?? [];
 
     try {
@@ -97,13 +100,50 @@ export class TenantsService {
         });
       } catch (error) {
         const hostname = this.vercelDomains.hostnameForSlug(tenant.slug);
-        const message = error instanceof Error ? error.message : 'Unknown error';
-        this.logger.warn(`Vercel domain provision failed for ${hostname}: ${message}`);
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(
+          `Vercel domain provision failed for ${hostname}: ${message}`,
+        );
 
         await this.audit.record({
           actorUserId,
           tenantId: tenant.id,
           action: 'tenant.domain.provision_failed',
+          entityType: 'tenant',
+          entityId: tenant.id,
+          payload: {
+            hostname,
+            error: message,
+          } as Prisma.InputJsonValue,
+        });
+      }
+
+      try {
+        const result = await this.route53Domains.createTenantCname(tenant.slug);
+
+        await this.audit.record({
+          actorUserId,
+          tenantId: tenant.id,
+          action: 'tenant.dns.created',
+          entityType: 'tenant',
+          entityId: tenant.id,
+          payload: {
+            outcome: result,
+          } as Prisma.InputJsonValue,
+        });
+      } catch (error) {
+        const hostname = this.route53Domains.hostnameForSlug(tenant.slug);
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(
+          `Route 53 CNAME create failed for ${hostname}: ${message}`,
+        );
+
+        await this.audit.record({
+          actorUserId,
+          tenantId: tenant.id,
+          action: 'tenant.dns.create_failed',
           entityType: 'tenant',
           entityId: tenant.id,
           payload: {
@@ -290,6 +330,39 @@ export class TenantsService {
     });
 
     try {
+      const result = await this.route53Domains.removeTenantCname(tenant.slug);
+
+      await this.audit.record({
+        actorUserId,
+        action: 'tenant.dns.removed',
+        entityType: 'tenant',
+        entityId: tenant.id,
+        payload: {
+          outcome: result,
+          slug: tenant.slug,
+        } as Prisma.InputJsonValue,
+      });
+    } catch (error) {
+      const hostname = this.route53Domains.hostnameForSlug(tenant.slug);
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(
+        `Route 53 CNAME removal failed for ${hostname}: ${message}`,
+      );
+
+      await this.audit.record({
+        actorUserId,
+        action: 'tenant.dns.remove_failed',
+        entityType: 'tenant',
+        entityId: tenant.id,
+        payload: {
+          hostname,
+          slug: tenant.slug,
+          error: message,
+        } as Prisma.InputJsonValue,
+      });
+    }
+
+    try {
       const result = await this.vercelDomains.removeTenantDomain(tenant.slug);
 
       await this.audit.record({
@@ -297,11 +370,16 @@ export class TenantsService {
         action: 'tenant.domain.removed',
         entityType: 'tenant',
         entityId: tenant.id,
-        payload: { outcome: result, slug: tenant.slug } as Prisma.InputJsonValue,
+        payload: {
+          outcome: result,
+          slug: tenant.slug,
+        } as Prisma.InputJsonValue,
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.warn(`Vercel domain removal failed for ${tenant.slug}: ${message}`);
+      this.logger.warn(
+        `Vercel domain removal failed for ${tenant.slug}: ${message}`,
+      );
 
       await this.audit.record({
         actorUserId,
