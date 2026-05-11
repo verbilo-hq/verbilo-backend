@@ -15,6 +15,9 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { DbUserRequestContext } from '../common/request-context';
 import { Roles } from '../common/roles.decorator';
 import { RolesGuard } from '../common/roles.guard';
+import { CreateTenantDto } from './dto/create-tenant.dto';
+import { TenantSlugQueryDto } from './dto/tenant-slug.dto';
+import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { TenantsService } from './tenants.service';
 
 type AdminRequest = Request & {
@@ -30,7 +33,7 @@ export class AdminTenantsController {
 
   @Post()
   createTenant(
-    @Body() body: Record<string, unknown>,
+    @Body() body: CreateTenantDto,
     @Req() request: AdminRequest,
   ) {
     return this.tenantsService.createTenant(body, request.dbUser?.id);
@@ -42,8 +45,8 @@ export class AdminTenantsController {
   }
 
   @Get('check-slug')
-  checkSlug(@Query('slug') slug?: string) {
-    return this.tenantsService.checkSlug(slug);
+  checkSlug(@Query() query: TenantSlugQueryDto) {
+    return this.tenantsService.checkSlug(query.slug);
   }
 
   @Get(':id')
@@ -54,7 +57,7 @@ export class AdminTenantsController {
   @Patch(':id')
   updateTenant(
     @Param('id') id: string,
-    @Body() body: Record<string, unknown>,
+    @Body() body: UpdateTenantDto,
     @Req() request: AdminRequest,
   ) {
     return this.tenantsService.updateTenant(id, body, request.dbUser?.id);

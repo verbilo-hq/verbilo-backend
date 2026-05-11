@@ -1,5 +1,6 @@
 import './instrument';
 
+import { ValidationPipe } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
@@ -82,6 +83,16 @@ async function bootstrap() {
       callback(null, isAllowedCorsOrigin(origin, corsOrigins));
     },
   });
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: { enableImplicitConversion: true },
+      stopAtFirstError: false,
+    }),
+  );
   await app.listen(configService.getOrThrow('PORT'));
 }
 void bootstrap();
