@@ -95,7 +95,10 @@ describe('VercelDomainsClient', () => {
           'Content-Type': 'application/json',
           Authorization: 'Bearer token',
         },
-        body: JSON.stringify({ name: 'acme.verbilo.co.uk', gitBranch: 'main' }),
+        // VER-55: gitBranch intentionally omitted — Vercel rejects
+        // gitBranch:"main" on production domains with
+        // cannot_set_production_branch_as_preview.
+        body: JSON.stringify({ name: 'acme.verbilo.co.uk' }),
       }),
     );
   });
