@@ -43,5 +43,29 @@ describe('EnvSchema', () => {
     expect(parsed.NODE_ENV).toBe('development');
     expect(parsed.AWS_REGION).toBe('eu-north-1');
   });
-});
 
+  it('defaults TENANT_BASE_DOMAIN to verbilo.co.uk', () => {
+    const parsed = EnvSchema.parse(validEnv);
+    expect(parsed.TENANT_BASE_DOMAIN).toBe('verbilo.co.uk');
+  });
+
+  it('requires VERCEL_PROJECT_ID when VERCEL_API_TOKEN is set', () => {
+    expect(() =>
+      EnvSchema.parse({
+        ...validEnv,
+        VERCEL_API_TOKEN: 'vercel-token',
+      }),
+    ).toThrow();
+  });
+
+  it('allows VERCEL_API_TOKEN when VERCEL_PROJECT_ID is also set', () => {
+    const parsed = EnvSchema.parse({
+      ...validEnv,
+      VERCEL_API_TOKEN: 'vercel-token',
+      VERCEL_PROJECT_ID: 'project-id',
+    });
+
+    expect(parsed.VERCEL_API_TOKEN).toBe('vercel-token');
+    expect(parsed.VERCEL_PROJECT_ID).toBe('project-id');
+  });
+});

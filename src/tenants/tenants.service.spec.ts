@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
+import { VercelDomainsClient } from '../integrations/vercel/vercel-domains.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantsService } from './tenants.service';
 
@@ -8,11 +9,19 @@ describe('TenantsService', () => {
   let tenantFindUnique: jest.Mock;
   let tenantCreate: jest.Mock;
   let auditRecord: jest.Mock;
+  let provisionTenantDomain: jest.Mock;
+  let hostnameForSlug: jest.Mock;
 
   beforeEach(() => {
     tenantFindUnique = jest.fn();
     tenantCreate = jest.fn();
     auditRecord = jest.fn().mockResolvedValue(undefined);
+    provisionTenantDomain = jest.fn().mockResolvedValue({
+      status: 'skipped',
+      hostname: 'acme.verbilo.co.uk',
+      reason: 'vercel-not-configured',
+    });
+    hostnameForSlug = jest.fn((slug: string) => `${slug}.verbilo.co.uk`);
 
     const prisma = {
       tenant: {
@@ -25,7 +34,12 @@ describe('TenantsService', () => {
       record: auditRecord,
     } as unknown as AuditService;
 
-    service = new TenantsService(prisma, audit);
+    const vercelDomains = {
+      provisionTenantDomain,
+      hostnameForSlug,
+    } as unknown as VercelDomainsClient;
+
+    service = new TenantsService(prisma, audit, vercelDomains);
   });
 
   it('rejects invalid slugs before checking the database', async () => {
@@ -40,6 +54,7 @@ describe('TenantsService', () => {
     expect(tenantFindUnique).not.toHaveBeenCalled();
     expect(tenantCreate).not.toHaveBeenCalled();
     expect(auditRecord).not.toHaveBeenCalled();
+    expect(provisionTenantDomain).not.toHaveBeenCalled();
   });
 
   it('rejects reserved slugs before checking the database', async () => {
@@ -54,6 +69,7 @@ describe('TenantsService', () => {
     expect(tenantFindUnique).not.toHaveBeenCalled();
     expect(tenantCreate).not.toHaveBeenCalled();
     expect(auditRecord).not.toHaveBeenCalled();
+    expect(provisionTenantDomain).not.toHaveBeenCalled();
   });
 
   it('rejects taken slugs', async () => {
@@ -73,9 +89,10 @@ describe('TenantsService', () => {
     });
     expect(tenantCreate).not.toHaveBeenCalled();
     expect(auditRecord).not.toHaveBeenCalled();
+    expect(provisionTenantDomain).not.toHaveBeenCalled();
   });
 
-  it('creates tenants with a normalized slug and writes an audit row', async () => {
+  it('creates tenants, provisions the Vercel domain, and writes audit rows', async () => {
     const createdAt = new Date('2026-05-10T10:00:00.000Z');
     const tenant = {
       id: 'tenant-id',
@@ -90,6 +107,12 @@ describe('TenantsService', () => {
 
     tenantFindUnique.mockResolvedValue(null);
     tenantCreate.mockResolvedValue(tenant);
+    provisionTenantDomain.mockResolvedValue({
+      status: 'provisioned',
+      hostname: 'acme-dental.verbilo.co.uk',
+      verified: true,
+      vercelDomain: { verified: true },
+    });
 
     await expect(
       service.createTenant(
@@ -114,7 +137,7 @@ describe('TenantsService', () => {
         enabledModules: ['documents'],
       },
     });
-    expect(auditRecord).toHaveBeenCalledWith({
+    expect(auditRecord).toHaveBeenNthCalledWith(1, {
       actorUserId: 'actor-user-id',
       tenantId: 'tenant-id',
       action: 'tenant.created',
@@ -127,6 +150,72 @@ describe('TenantsService', () => {
         enabledModules: ['documents'],
       },
     });
+    expect(provisionTenantDomain).toHaveBeenCalledWith('acme-dental', 'main');
+    expect(auditRecord).toHaveBeenNthCalledWith(2, {
+      actorUserId: 'actor-user-id',
+      tenantId: 'tenant-id',
+      action: 'tenant.domain.provisioned',
+      entityType: 'tenant',
+      entityId: 'tenant-id',
+      payload: {
+        outcome: {
+          status: 'provisioned',
+          hostname: 'acme-dental.verbilo.co.uk',
+          verified: true,
+          vercelDomain: { verified: true },
+        },
+      },
+    });
+
+    expect(tenantCreate.mock.invocationCallOrder[0]).toBeLessThan(
+      provisionTenantDomain.mock.invocationCallOrder[0],
+    );
+    expect(auditRecord.mock.invocationCallOrder[0]).toBeLessThan(
+      provisionTenantDomain.mock.invocationCallOrder[0],
+    );
+  });
+
+  it('records a provision_failed audit log when Vercel provisioning throws and still returns the tenant', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const tenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      archivedAt: null,
+      createdAt,
+    };
+
+    tenantFindUnique.mockResolvedValue(null);
+    tenantCreate.mockResolvedValue(tenant);
+    provisionTenantDomain.mockRejectedValue(new Error('boom'));
+
+    await expect(
+      service.createTenant(
+        {
+          name: 'Acme Dental',
+          slug: 'acme-dental',
+          sector: 'dental',
+        },
+        'actor-user-id',
+      ),
+    ).resolves.toMatchObject({
+      id: 'tenant-id',
+      url: 'https://acme-dental.verbilo.co.uk',
+    });
+
+    expect(auditRecord).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        action: 'tenant.domain.provision_failed',
+        payload: {
+          hostname: 'acme-dental.verbilo.co.uk',
+          error: 'boom',
+        },
+      }),
+    );
   });
 
   // VER-47: cross-sector coverage so the dental-flavoured fixtures above
