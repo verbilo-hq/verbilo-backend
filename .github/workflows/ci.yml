@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev, main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Prisma generate
+        # Placeholder DATABASE_URL prevents Prisma from failing URL parsing in CI.
+        env:
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+        run: npx prisma generate
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        # Placeholders keep builds future-proof if runtime starts requiring env vars.
+        env:
+          DATABASE_URL: postgresql://placeholder:placeholder@localhost:5432/placeholder
+          AWS_REGION: eu-north-1
+          COGNITO_USER_POOL_ID: eu-north-1_ciplaceholder
+          COGNITO_CLIENT_ID: ci-placeholder-client-id
+          FRONTEND_URL: https://verbilo.co.uk
+        run: npm run build
