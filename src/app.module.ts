@@ -12,9 +12,17 @@ import { UsersModule } from './users/users.module';
 import { AuditModule } from './audit/audit.module';
 import { TenantContextMiddleware } from './common/tenant-context.middleware';
 import { TenantsModule } from './tenants/tenants.module';
+import { AppConfigModule } from './config/config.module';
 
 @Module({
-  imports: [PrismaModule, AuthModule, AuditModule, UsersModule, TenantsModule],
+  imports: [
+    AppConfigModule,
+    PrismaModule,
+    AuthModule,
+    AuditModule,
+    UsersModule,
+    TenantsModule,
+  ],
   controllers: [AppController],
   providers: [AppService],
 })
