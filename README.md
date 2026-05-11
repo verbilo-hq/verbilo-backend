@@ -14,6 +14,8 @@ Verbilo is a multi-tenant intranet SaaS for UK dental group practices. This repo
 | DNS | AWS Route 53 (planned). Records currently live at the IONOS registrar; Route 53 migration is pending. |
 | Alerting / errors | Sentry (wired in backend; no-op when `SENTRY_DSN` is unset). |
 
+Render health checks should use `GET /health` (returns 200 only when the DB is reachable).
+
 ## Local setup
 
 ```bash
