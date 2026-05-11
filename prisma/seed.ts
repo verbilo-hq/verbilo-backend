@@ -13,6 +13,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import { normalizeSlug } from '../src/common/slug';
+import { USER_ROLES, isUserRole } from '../src/common/user-roles';
 
 const prisma = new PrismaClient();
 
@@ -111,23 +112,40 @@ async function seedCognitoUser(targetSlug: string) {
     orderBy: { name: 'asc' },
   });
 
+  // Optional role override (SEED_ROLE) — useful for seeding internal admin
+  // accounts that need to span tenants (e.g. verbilo_super_admin). When not
+  // set, leaves the existing row's role untouched on update and falls back
+  // to the schema default 'employee' on create.
+  const seedRole = process.env.SEED_ROLE;
+  let role: string | undefined;
+  if (seedRole) {
+    if (!isUserRole(seedRole)) {
+      throw new Error(
+        `SEED_ROLE=${seedRole} is not a valid UserRole. Accepted: ${USER_ROLES.join(', ')}`,
+      );
+    }
+    role = seedRole;
+  }
+
   const user = await prisma.user.upsert({
     where: { cognitoId: cognitoSub },
     update: {
       username,
       tenantId: tenant.id,
       siteId: site?.id ?? null,
+      ...(role ? { role } : {}),
     },
     create: {
       username,
       cognitoId: cognitoSub,
       tenantId: tenant.id,
       siteId: site?.id ?? null,
+      ...(role ? { role } : {}),
     },
   });
 
   console.log(
-    `[seed] ✓ user paired: id=${user.id} → ${tenant.slug} (${tenant.sector})`,
+    `[seed] ✓ user paired: id=${user.id} role=${user.role} → ${tenant.slug} (${tenant.sector})`,
   );
 }
 
