@@ -2,6 +2,7 @@ import './instrument';
 
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 import type { Env } from './config/env.schema';
 
@@ -59,6 +60,22 @@ async function bootstrap() {
     const { SentryGlobalFilter } = require('@sentry/nestjs/setup');
     app.useGlobalFilters(new SentryGlobalFilter(app.get(HttpAdapterHost)));
   }
+
+  app.use(
+    helmet({
+      hsts: {
+        maxAge: 31536000, // 1 year
+        includeSubDomains: true,
+        preload: true,
+      },
+      frameguard: { action: 'deny' },
+      referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+      // Disable Helmet's own CSP — the frontend ships CSP via vercel.json
+      // (VER-21 will land that), and Render returns JSON not HTML so the
+      // backend's response CSP doesn't help us.
+      contentSecurityPolicy: false,
+    }),
+  );
 
   app.enableCors({
     origin(origin: string | undefined, callback: CorsOriginCallback) {

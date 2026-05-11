@@ -22,6 +22,8 @@ cp .env.example .env
 npm run start:dev
 ```
 
+- Baseline security headers are set via `helmet` in `src/main.ts` (HSTS 1y + `preload`, `X-Frame-Options: DENY`, `Referrer-Policy: strict-origin-when-cross-origin`, and no CSP — CSP is frontend-side via `vercel.json` in VER-21).
+
 ## Environment variables
 
 - `DATABASE_URL` — PostgreSQL connection string for the Neon database.
