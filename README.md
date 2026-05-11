@@ -48,6 +48,11 @@ At the database level:
 - `Patient` belongs to a `Tenant` and a `Site` (both cascade-delete), with NHS number, DOB, registered GP, and a JSONB allergies array. Indexed on `(tenantId, siteId, surname)` for the typical search pattern.
 - `Appointment` references `Patient`, `Site`, and a `User` for the dentist (`AppointmentStatus` enum: `scheduled / confirmed / in_progress / completed / no_show / cancelled`). Indexed on `(siteId, startsAt)` for day-view queries. The `dentistId` FK will move to `StaffMember` once VER-23 ships.
 
+### GDPR endpoints
+
+- `GET /users/me/export` — DSAR (data subject access request) export for the authenticated user.
+- `DELETE /users/me` — soft-delete + anonymisation for the authenticated user (retention policy pending; no hard delete).
+
 Verbilo uses three web surfaces:
 
 - `verbilo.co.uk` for the public landing site.
