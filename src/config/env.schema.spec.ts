@@ -68,4 +68,40 @@ describe('EnvSchema', () => {
     expect(parsed.VERCEL_API_TOKEN).toBe('vercel-token');
     expect(parsed.VERCEL_PROJECT_ID).toBe('project-id');
   });
+
+  it('allows AWS access keys when both are present', () => {
+    const parsed = EnvSchema.parse({
+      ...validEnv,
+      AWS_ACCESS_KEY_ID: 'access-key-id',
+      AWS_SECRET_ACCESS_KEY: 'secret-access-key',
+    });
+
+    expect(parsed.AWS_ACCESS_KEY_ID).toBe('access-key-id');
+    expect(parsed.AWS_SECRET_ACCESS_KEY).toBe('secret-access-key');
+  });
+
+  it('allows AWS access keys when both are absent', () => {
+    const parsed = EnvSchema.parse(validEnv);
+
+    expect(parsed.AWS_ACCESS_KEY_ID).toBeUndefined();
+    expect(parsed.AWS_SECRET_ACCESS_KEY).toBeUndefined();
+  });
+
+  it('requires AWS_SECRET_ACCESS_KEY when AWS_ACCESS_KEY_ID is set', () => {
+    expect(() =>
+      EnvSchema.parse({
+        ...validEnv,
+        AWS_ACCESS_KEY_ID: 'access-key-id',
+      }),
+    ).toThrow();
+  });
+
+  it('requires AWS_ACCESS_KEY_ID when AWS_SECRET_ACCESS_KEY is set', () => {
+    expect(() =>
+      EnvSchema.parse({
+        ...validEnv,
+        AWS_SECRET_ACCESS_KEY: 'secret-access-key',
+      }),
+    ).toThrow();
+  });
 });

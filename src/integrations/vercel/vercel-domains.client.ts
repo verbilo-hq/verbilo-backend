@@ -36,9 +36,19 @@ export class VercelDomainsClient {
   }
 
   /**
-   * Provision `{slug}.{baseDomain}` on the Vercel project, attached to the
-   * given git branch (`main` for prod, `dev` for staging — but staging
-   * doesn't reach here because isAutoProvisionEnabled returns false).
+   * Provision `{slug}.{baseDomain}` on the Vercel project as a production
+   * domain. We only reach this code path on prod (the staging path
+   * short-circuits via `isAutoProvisionEnabled` since the wildcard cert
+   * already covers `*.staging.verbilo.co.uk`), so the domain is always
+   * registered against the project's production branch.
+   *
+   * The `branch` parameter is accepted for forward-compat but intentionally
+   * NOT sent to Vercel — Vercel rejects `gitBranch: "main"` on prod domains
+   * with `cannot_set_production_branch_as_preview`. Production domains on
+   * Vercel ride the project's default production branch implicitly with
+   * `gitBranch: null` (confirmed by inspecting the existing prod domains
+   * `admin.verbilo.co.uk`, `www.verbilo.co.uk`, `verbilo.co.uk`). See
+   * VER-55 for the regression history.
    *
    * Returns a structured outcome rather than throwing for "domain already
    * exists" — the caller wants to know if it was already there, not blow up
@@ -48,7 +58,7 @@ export class VercelDomainsClient {
    */
   async provisionTenantDomain(
     slug: string,
-    branch: 'main' | 'dev' = 'main',
+    _branch: 'main' | 'dev' = 'main',
   ): Promise<VercelProvisionResult> {
     const hostname = this.hostnameForSlug(slug);
 
@@ -66,7 +76,8 @@ export class VercelDomainsClient {
     const response = await fetch(url, {
       method: 'POST',
       headers: this.headers(),
-      body: JSON.stringify({ name: hostname, gitBranch: branch }),
+      // Body intentionally omits `gitBranch` — see method docstring + VER-55.
+      body: JSON.stringify({ name: hostname }),
     });
 
     if (response.status === 409) {
