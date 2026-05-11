@@ -256,6 +256,63 @@ export class TenantsService {
     return this.withTenantUrl(updatedTenant);
   }
 
+  async deleteTenant(id: string, actorUserId?: string): Promise<void> {
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    const snapshot = {
+      id: tenant.id,
+      slug: tenant.slug,
+      name: tenant.name,
+      sector: tenant.sector,
+      enabledModules: tenant.enabledModules,
+      createdAt: tenant.createdAt,
+    };
+
+    await this.prisma.$transaction(async (tx) => {
+      await tx.auditLog.create({
+        data: {
+          actorUserId,
+          tenantId: tenant.id,
+          action: 'tenant.deleted',
+          entityType: 'tenant',
+          entityId: tenant.id,
+          payloadJson: { snapshot } as Prisma.InputJsonValue,
+        },
+      });
+
+      await tx.tenant.delete({ where: { id } });
+    });
+
+    try {
+      const result = await this.vercelDomains.removeTenantDomain(tenant.slug);
+
+      await this.audit.record({
+        actorUserId,
+        action: 'tenant.domain.removed',
+        entityType: 'tenant',
+        entityId: tenant.id,
+        payload: { outcome: result, slug: tenant.slug } as Prisma.InputJsonValue,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.warn(`Vercel domain removal failed for ${tenant.slug}: ${message}`);
+
+      await this.audit.record({
+        actorUserId,
+        action: 'tenant.domain.remove_failed',
+        entityType: 'tenant',
+        entityId: tenant.id,
+        payload: { slug: tenant.slug, error: message } as Prisma.InputJsonValue,
+      });
+    }
+  }
+
   async getPublicTenantBySlug(rawSlug: string) {
     const slug = normalizeSlug(rawSlug);
 
