@@ -5,6 +5,7 @@ import {
   Injectable,
   NestInterceptor,
 } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
 import { Observable } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 import { AuditService } from '../audit/audit.service';
@@ -13,6 +14,7 @@ import type {
   DbUserRequestContext,
   TenantRequestContext,
 } from './request-context';
+import { SKIP_AUDIT_LOG_KEY } from './skip-audit-log.decorator';
 
 type AuditRequest = Request & {
   user?: CognitoJwtPayload;
@@ -24,9 +26,21 @@ const MUTATING_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
 
 @Injectable()
 export class AuditLogInterceptor implements NestInterceptor {
-  constructor(private readonly audit: AuditService) {}
+  constructor(
+    private readonly audit: AuditService,
+    private readonly reflector: Reflector,
+  ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
+    const skipAuditLog = this.reflector.getAllAndOverride<boolean>(
+      SKIP_AUDIT_LOG_KEY,
+      [context.getHandler(), context.getClass()],
+    );
+
+    if (skipAuditLog) {
+      return next.handle();
+    }
+
     const request = context.switchToHttp().getRequest<AuditRequest>();
 
     if (!MUTATING_METHODS.has(request.method)) {
@@ -97,4 +111,3 @@ export class AuditLogInterceptor implements NestInterceptor {
     return null;
   }
 }
-

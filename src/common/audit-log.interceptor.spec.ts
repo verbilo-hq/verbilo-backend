@@ -8,6 +8,8 @@ describe('AuditLogInterceptor', () => {
       switchToHttp: () => ({
         getRequest: () => request,
       }),
+      getHandler: () => ({}),
+      getClass: () => ({}),
     }) as unknown as ExecutionContext;
 
   const makeHandler = (value: unknown): CallHandler =>
@@ -19,7 +21,8 @@ describe('AuditLogInterceptor', () => {
     'records audit log for %s',
     async (method) => {
       const audit = { record: jest.fn().mockResolvedValue(undefined) };
-      const interceptor = new AuditLogInterceptor(audit as any);
+      const reflector = { getAllAndOverride: jest.fn().mockReturnValue(false) };
+      const interceptor = new AuditLogInterceptor(audit as any, reflector as any);
 
       const request = {
         method,
@@ -54,7 +57,8 @@ describe('AuditLogInterceptor', () => {
 
   it('does not record for GET requests', async () => {
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
-    const interceptor = new AuditLogInterceptor(audit as any);
+    const reflector = { getAllAndOverride: jest.fn().mockReturnValue(false) };
+    const interceptor = new AuditLogInterceptor(audit as any, reflector as any);
 
     await new Promise<void>((resolve, reject) => {
       interceptor
@@ -77,7 +81,8 @@ describe('AuditLogInterceptor', () => {
 
   it('does not record when handler throws', async () => {
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
-    const interceptor = new AuditLogInterceptor(audit as any);
+    const reflector = { getAllAndOverride: jest.fn().mockReturnValue(false) };
+    const interceptor = new AuditLogInterceptor(audit as any, reflector as any);
 
     const context = makeContext({
       method: 'POST',
@@ -101,4 +106,3 @@ describe('AuditLogInterceptor', () => {
     expect(audit.record).not.toHaveBeenCalled();
   });
 });
-

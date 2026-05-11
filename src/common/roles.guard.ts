@@ -61,12 +61,13 @@ export class RolesGuard implements CanActivate {
       },
     });
 
-    if (!dbUser || !isUserRole(dbUser.role)) {
+    if (!dbUser || !dbUser.cognitoId || !isUserRole(dbUser.role)) {
       return undefined;
     }
 
     return {
       ...dbUser,
+      cognitoId: dbUser.cognitoId,
       role: dbUser.role,
     };
   }
