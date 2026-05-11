@@ -13,6 +13,7 @@ import { AuditModule } from './audit/audit.module';
 import { TenantContextMiddleware } from './common/tenant-context.middleware';
 import { TenantsModule } from './tenants/tenants.module';
 import { AppConfigModule } from './config/config.module';
+import { HealthModule } from './health/health.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { AppConfigModule } from './config/config.module';
     AuditModule,
     UsersModule,
     TenantsModule,
+    HealthModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -117,6 +117,6 @@ The `postinstall` script must run `prisma generate` so Render produces Prisma cl
 
 - Do not add MFA, self-signup, Cognito hosted UI, or Cognito admin APIs.
 - Do not add token audience/type validation unless requested.
-- Do not add `/health` unless requested.
+- `/health` is part of the canonical surface (Render health checks) and must stay unauthenticated and lightweight.
 - Do not replace Prisma with another ORM or bypass Prisma for regular application queries.
 - Do not change `/users/me` response shape unless coordinating the frontend session enrichment contract.
