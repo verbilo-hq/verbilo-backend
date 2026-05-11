@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PassportStrategy } from '@nestjs/passport';
 import { passportJwtSecret } from 'jwks-rsa';
 import { ExtractJwt, Strategy } from 'passport-jwt';
+import type { Env } from '../config/env.schema';
 
 export type CognitoJwtPayload = {
   sub: string;
@@ -10,15 +12,9 @@ export type CognitoJwtPayload = {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor() {
-    const awsRegion = process.env.AWS_REGION;
-    const userPoolId = process.env.COGNITO_USER_POOL_ID;
-
-    if (!awsRegion || !userPoolId) {
-      throw new Error(
-        'AWS_REGION and COGNITO_USER_POOL_ID must be set for JWT validation',
-      );
-    }
+  constructor(configService: ConfigService<Env, true>) {
+    const awsRegion = configService.getOrThrow('AWS_REGION');
+    const userPoolId = configService.getOrThrow('COGNITO_USER_POOL_ID');
 
     const cognitoIssuer = `https://cognito-idp.${awsRegion}.amazonaws.com/${userPoolId}`;
 

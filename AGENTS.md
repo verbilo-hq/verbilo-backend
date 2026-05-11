@@ -47,7 +47,7 @@ Seed-only variables:
 - `SEED_USERNAME`: Required for `npm run seed`.
 - `SEED_COGNITO_SUB`: Required for `npm run seed`; must match the Cognito user `sub` claim.
 
-All runtime config should be read from `process.env`. Do not hardcode pool ids, URLs, connection strings, or origins in source files.
+All runtime config should be read via Nest `ConfigService` (validated by `src/config/env.schema.ts`). Only pre-boot code (e.g. `src/instrument.ts`) and standalone scripts (e.g. `prisma/seed.ts`) should read `process.env` directly. Do not hardcode pool ids, URLs, connection strings, or origins in source files.
 
 ## Authentication Conventions
 
@@ -102,7 +102,8 @@ The `postinstall` script must run `prisma generate` so Render produces Prisma cl
 - Keep controllers thin; put business/database logic in services when behavior grows beyond a narrow endpoint.
 - Use dependency injection for shared services.
 - Keep route behavior explicit with Nest exceptions such as `NotFoundException` and guards such as `JwtAuthGuard`.
-- Do not add broad infrastructure packages such as `@nestjs/config`, global validation, helmet, compression, or health modules unless requested.
+- Env validation uses `@nestjs/config` + Zod in `src/config/env.schema.ts`; add new runtime env vars there.
+- Do not add broad infrastructure packages such as global validation, helmet, compression, or health modules unless requested.
 - Avoid DTOs/serializers until the route surface needs them or the user asks for them.
 
 ## Git And File Hygiene
