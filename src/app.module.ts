@@ -20,6 +20,7 @@ import { AppConfigModule } from './config/config.module';
 import { HealthModule } from './health/health.module';
 import { StaffModule } from './staff/staff.module';
 import { DashboardModule } from './dashboard/dashboard.module';
+import { AdminUsersModule } from './admin/admin-users.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { DashboardModule } from './dashboard/dashboard.module';
     AuditModule,
     UsersModule,
     TenantsModule,
+    AdminUsersModule,
     StaffModule,
     DashboardModule,
     HealthModule,
