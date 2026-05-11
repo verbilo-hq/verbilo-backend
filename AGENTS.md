@@ -2,9 +2,13 @@
 
 This file is the working guide for AI agents and contributors in this repository. Follow it unless a newer user instruction explicitly overrides it.
 
+## Branch and Deploy Model
+
+See `README.md` for the canonical workflow and deployment model. In short: feature branches branch off `dev`, PRs target `dev`, and release PRs go `dev` → `main`. Render staging is `https://verbilo-backend-staging.onrender.com`.
+
 ## Project Context
 
-- App: Verbilo, a multi-tenant intranet SaaS for UK dental group practices.
+- App: Verbilo, a multi-tenant intranet SaaS for UK multi-site healthcare operators (dental groups, GP federations, vet groups, optical chains, physiotherapy networks, etc.). `Tenant.sector` is one of `dental, gp, vets, physio, optometry, other, healthcare` — UI chrome adapts via `src/lib/sector.js` on the frontend, sector-specific features gate via `Tenant.enabledModules`.
 - Repository: NestJS API deployed to Render.
 - Database: Neon PostgreSQL accessed through Prisma.
 - Authentication: AWS Cognito JWT validation via JWKS. The frontend sends Cognito ID tokens as `Authorization: Bearer <token>`.
@@ -17,7 +21,7 @@ This file is the working guide for AI agents and contributors in this repository
 - Production start: `npm run start:prod`
 - Prisma validate: `npx prisma validate`
 - Prisma generate: `npx prisma generate`
-- Seed local/dev database: `SEED_USERNAME=<username> SEED_COGNITO_SUB=<uuid> npm run seed`
+- Seed local/dev database: `npm run seed` (always upserts cross-sector demo tenants — dental/vets/optometry/GP — idempotent by slug). Optionally set `SEED_USERNAME` + `SEED_COGNITO_SUB` to pair a Cognito user; defaults to SmileCo. Override the pairing target with `SEED_TENANT_SLUG=riverside-vets` etc.
 
 Run `npm run build` after source changes. For Prisma schema changes, also run `npx prisma validate`. Documentation-only changes do not require a build.
 
@@ -36,14 +40,13 @@ Required or supported variables:
 - `SENTRY_DSN`: Optional Sentry DSN.
 - `PORT`: Runtime port. Render injects this automatically in production.
 
-Seed-only variables:
+Seed-only variables (all optional):
 
-- `SEED_TENANT_NAME`: Optional; defaults to `Verbilo Dev Tenant`.
-- `SEED_SITE_NAME`: Optional; defaults to `Dev Site`.
-- `SEED_USERNAME`: Required for `npm run seed`.
-- `SEED_COGNITO_SUB`: Required for `npm run seed`; must match the Cognito user `sub` claim.
+- `SEED_USERNAME` / `SEED_COGNITO_SUB`: When both are set, the seed pairs a User row to one of the demo tenants; otherwise the seed just upserts the demo tenants without creating a user.
+- `SEED_TENANT_SLUG`: Tenant slug to pair the user to (default `smileco`). Useful for testing non-dental flows — e.g. `SEED_TENANT_SLUG=riverside-vets`.
+- `SEED_TENANT_NAME` / `SEED_SITE_NAME`: Legacy single-tenant pre-VER-47 vars. Still honoured for backward compat — if set, the tenant is upserted and used as the pairing target.
 
-All runtime config should be read from `process.env`. Do not hardcode pool ids, URLs, connection strings, or origins in source files.
+All runtime config should be read via Nest `ConfigService` (validated by `src/config/env.schema.ts`). Only pre-boot code (e.g. `src/instrument.ts`) and standalone scripts (e.g. `prisma/seed.ts`) should read `process.env` directly. Do not hardcode pool ids, URLs, connection strings, or origins in source files.
 
 ## Authentication Conventions
 
@@ -98,7 +101,8 @@ The `postinstall` script must run `prisma generate` so Render produces Prisma cl
 - Keep controllers thin; put business/database logic in services when behavior grows beyond a narrow endpoint.
 - Use dependency injection for shared services.
 - Keep route behavior explicit with Nest exceptions such as `NotFoundException` and guards such as `JwtAuthGuard`.
-- Do not add broad infrastructure packages such as `@nestjs/config`, global validation, helmet, compression, or health modules unless requested.
+- Env validation uses `@nestjs/config` + Zod in `src/config/env.schema.ts`; add new runtime env vars there.
+- Do not add broad infrastructure packages such as global validation, helmet, compression, or health modules unless requested.
 - Avoid DTOs/serializers until the route surface needs them or the user asks for them.
 
 ## Git And File Hygiene
@@ -112,6 +116,6 @@ The `postinstall` script must run `prisma generate` so Render produces Prisma cl
 
 - Do not add MFA, self-signup, Cognito hosted UI, or Cognito admin APIs.
 - Do not add token audience/type validation unless requested.
-- Do not add `/health` unless requested.
+- `/health` is part of the canonical surface (Render health checks) and must stay unauthenticated and lightweight.
 - Do not replace Prisma with another ORM or bypass Prisma for regular application queries.
 - Do not change `/users/me` response shape unless coordinating the frontend session enrichment contract.

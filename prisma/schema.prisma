@@ -7,29 +7,147 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum AppointmentStatus {
+  scheduled
+  confirmed
+  in_progress
+  completed
+  no_show
+  cancelled
+}
+
+enum StaffRole {
+  admin
+  manager
+  clinician
+  clinical_support
+  reception
+  admin_support
+}
+
 model Tenant {
-  id        String   @id @default(uuid()) @db.Uuid
-  name      String
-  createdAt DateTime @default(now())
-  sites     Site[]
-  users     User[]
+  id             String        @id @default(uuid()) @db.Uuid
+  name           String
+  slug           String        @unique
+  sector         String        @default("healthcare")
+  enabledModules String[]      @default([])
+  settings       Json          @default("{}")
+  archivedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  sites          Site[]
+  users          User[]
+  patients       Patient[]
+  staff          StaffMember[]
 }
 
 model Site {
-  id       String @id @default(uuid()) @db.Uuid
-  name     String
-  tenantId String @db.Uuid
-  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  users    User[]
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String
+  tenantId     String        @db.Uuid
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users        User[]
+  patients     Patient[]
+  appointments Appointment[]
+  staff        StaffMember[]
 }
 
 model User {
-  id        String   @id @default(uuid()) @db.Uuid
-  username  String   @unique
-  cognitoId String   @unique
-  tenantId  String   @db.Uuid
-  siteId    String?  @db.Uuid
-  tenant    Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  site      Site?    @relation(fields: [siteId], references: [id])
-  createdAt DateTime @default(now())
+  id                    String        @id @default(uuid()) @db.Uuid
+  username              String        @unique
+  cognitoId             String?       @unique
+  tenantId              String        @db.Uuid
+  siteId                String?       @db.Uuid
+  role                  String        @default("employee")
+  tenant                Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site                  Site?         @relation(fields: [siteId], references: [id])
+  createdAt             DateTime      @default(now())
+  deletedAt             DateTime?
+  appointmentsAsPractitioner Appointment[]
+  staffMember           StaffMember?
+}
+
+model Patient {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  siteId       String   @db.Uuid
+  nhsNumber    String?
+  dateOfBirth  DateTime @db.Date
+  firstName    String
+  surname      String
+  middleNames  String?
+  addressLine1 String?
+  addressLine2 String?
+  city         String?
+  postcode     String?
+  registeredGp String?
+  allergies    Json     @default("[]")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site         Site          @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@index([tenantId, siteId, surname])
+}
+
+model Appointment {
+  id        String            @id @default(uuid()) @db.Uuid
+  patientId String            @db.Uuid
+  siteId    String            @db.Uuid
+  practitionerId String       @db.Uuid
+  startsAt  DateTime
+  endsAt    DateTime
+  status    AppointmentStatus @default(scheduled)
+  notes     String?
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  site    Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  // TODO (VER-47 follow-up): switch FK to StaffMember once VER-27/StaffMember linkage lands.
+  practitioner User @relation(fields: [practitionerId], references: [id])
+
+  @@index([siteId, startsAt])
+}
+
+model StaffMember {
+  id         String    @id @default(uuid()) @db.Uuid
+  tenantId   String    @db.Uuid
+  siteId     String?   @db.Uuid
+  userId     String?   @unique @db.Uuid
+  firstName  String
+  surname    String
+  email      String
+  phone      String?
+  role       StaffRole
+  clinicalSpecialty String?
+  gdcNumber  String?
+  startedAt  DateTime?
+  endedAt    DateTime?
+  archivedAt DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  site   Site?  @relation(fields: [siteId], references: [id], onDelete: SetNull)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, email])
+  @@index([tenantId, surname])
+  @@index([tenantId, siteId])
+}
+
+model AuditLog {
+  id          String   @id @default(uuid()) @db.Uuid
+  actorUserId String?  @db.Uuid
+  tenantId    String?  @db.Uuid
+  action      String
+  entityType  String
+  entityId    String?
+  payloadJson Json     @default("{}")
+  createdAt   DateTime @default(now())
+
+  @@index([tenantId, createdAt(sort: Desc)])
+  @@index([actorUserId, createdAt(sort: Desc)])
 }
