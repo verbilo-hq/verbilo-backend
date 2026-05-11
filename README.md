@@ -113,7 +113,7 @@ Living runbook — read this before touching production.
 3. `cp .env.example .env` — then fill the variables (see [Environment variables](#environment-variables) above). Ask in the team chat for the Neon dev connection string and the Cognito IDs.
 4. `npx prisma generate` — generates the typed client from `schema.prisma`. The `postinstall` hook also runs this; safe to repeat.
 5. `npx prisma migrate dev` — applies pending migrations to your local DB. Use a personal Neon branch (`verbilo-dev/<your-name>`) so you don't trample shared staging.
-6. `npm run seed` — idempotent. Upserts four cross-sector demo tenants (SmileCo Dental Group / Riverside Vets / BrightSight Opticians / Greenfield GP Federation) plus their sites. If you also set `SEED_USERNAME` and `SEED_COGNITO_SUB` env vars, it pairs a User row to one of them (defaults to SmileCo; override with `SEED_TENANT_SLUG`).
+6. `npm run seed` — idempotent. Upserts four cross-sector demo tenants (SmileCo Dental Group / Riverside Vets / BrightSight Opticians / Greenfield GP Federation) plus their sites. If you also set `SEED_USERNAME` and `SEED_COGNITO_SUB` env vars, it pairs a User row to one of them (defaults to SmileCo; override with `SEED_TENANT_SLUG`). Optionally set `SEED_ROLE` to one of the values in `src/common/user-roles.ts` (e.g. `verbilo_super_admin`) to stamp the User's role at the same time — handy for provisioning internal admin accounts.
 7. `npm run start:dev` — Nest runs at `http://localhost:3000`. Confirm `GET /health` returns 200.
 
 To impersonate a tenant locally, hit endpoints with `X-Tenant-Slug: <slug>` and a valid Cognito JWT in `Authorization: Bearer …`. See "Seeding a Cognito user" below.
