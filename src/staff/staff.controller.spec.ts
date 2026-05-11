@@ -34,6 +34,15 @@ describe('StaffController', () => {
     expect(controller).toBeDefined();
   });
 
+  it('throws 403 when the actor has no tenant context', async () => {
+    await expect(
+      controller.listStaff(
+        { siteId: undefined } as any,
+        { dbUser: { tenantId: null } } as any,
+      ),
+    ).rejects.toThrow('Platform admin must act on a specific tenant context');
+  });
+
   it('returns list responses with the expected shape', async () => {
     staffService.listStaffMembers.mockResolvedValueOnce([
       {

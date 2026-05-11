@@ -9,7 +9,7 @@ export type UserMeExport = {
     username: string;
     cognitoId: string | null;
     role: string;
-    tenantId: string;
+    tenantId: string | null;
     siteId: string | null;
     createdAt: Date;
     deletedAt: Date | null;

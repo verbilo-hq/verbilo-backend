@@ -37,7 +37,7 @@ export class UserMeDto {
 
   @Expose()
   @Type(() => UserMeTenantDto)
-  tenant!: UserMeTenantDto;
+  tenant!: UserMeTenantDto | null;
 
   @Expose()
   @Type(() => UserMeSiteDto)

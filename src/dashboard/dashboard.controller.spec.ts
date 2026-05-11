@@ -74,5 +74,35 @@ describe('DashboardController', () => {
 
     expect(dashboardService.getSummary).not.toHaveBeenCalled();
   });
-});
 
+  it('throws 403 when the caller has no tenant context', async () => {
+    const prisma = {
+      user: {
+        findUnique: jest.fn().mockResolvedValue({
+          tenantId: null,
+          siteId: null,
+        }),
+      },
+    };
+
+    const dashboardService = {
+      getSummary: jest.fn(),
+    };
+
+    const moduleRef = await Test.createTestingModule({
+      controllers: [DashboardController],
+      providers: [
+        { provide: PrismaService, useValue: prisma },
+        { provide: DashboardService, useValue: dashboardService },
+      ],
+    }).compile();
+
+    const controller = moduleRef.get(DashboardController);
+
+    await expect(
+      controller.getSummary({ user: { sub: 'cognito-sub' } } as any),
+    ).rejects.toThrow('Platform admin must act on a specific tenant context');
+
+    expect(dashboardService.getSummary).not.toHaveBeenCalled();
+  });
+});
