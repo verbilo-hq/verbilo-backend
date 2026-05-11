@@ -12,7 +12,7 @@ Verbilo is a multi-tenant intranet SaaS for UK dental group practices. This repo
 | Database | Neon PostgreSQL |
 | Auth | AWS Cognito (eu-north-1) |
 | DNS | AWS Route 53 (planned). Records currently live at the IONOS registrar; Route 53 migration is pending. |
-| Alerting / errors | Sentry (planned — projects exist but the SDK isn't initialised in either repo; see VER-15 / VER-35). |
+| Alerting / errors | Sentry (wired in backend; no-op when `SENTRY_DSN` is unset). |
 
 ## Local setup
 
@@ -30,7 +30,7 @@ npm run start:dev
 - `AWS_REGION` — AWS region where the Cognito user pool is hosted.
 - `FRONTEND_URL` — Frontend origin allowed by backend CORS.
 - `FRONTEND_URLS` — Optional comma-separated extra allowed origins.
-- `SENTRY_DSN` — Optional Sentry DSN (Sentry SDK not yet wired — see VER-15 / VER-35).
+- `SENTRY_DSN` — Optional Sentry DSN (Sentry SDK wired; no-op when unset).
 
 See `.env.example` for the full list (including optional variables).
 
