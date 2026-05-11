@@ -45,7 +45,8 @@ describe('StaffController', () => {
         surname: 'Example',
         email: 'alice@example.com',
         phone: null,
-        role: 'dentist',
+        role: 'clinician',
+        clinicalSpecialty: 'Dentist',
         gdcNumber: null,
         startedAt: null,
         endedAt: null,
@@ -82,7 +83,8 @@ describe('StaffController', () => {
       surname: 'Example',
       email: 'alice@example.com',
       phone: null,
-      role: 'dentist',
+      role: 'clinician',
+      clinicalSpecialty: 'Physiotherapist',
       gdcNumber: null,
       startedAt: null,
       endedAt: null,
@@ -96,7 +98,8 @@ describe('StaffController', () => {
       firstName: 'Alice',
       surname: 'Example',
       email: 'alice@example.com',
-      role: 'dentist',
+      role: 'clinician',
+      clinicalSpecialty: 'Physiotherapist',
     };
 
     const result = await controller.createStaff(body as any, {

@@ -1,6 +1,7 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
@@ -18,6 +19,7 @@ export class CreateTenantDto {
   slug!: string;
 
   @IsString()
+  @IsIn(['dental', 'gp', 'vets', 'physio', 'optometry', 'other', 'healthcare'])
   @MaxLength(64)
   sector!: string;
 
@@ -27,4 +29,3 @@ export class CreateTenantDto {
   @IsString({ each: true })
   enabledModules?: string[];
 }
-

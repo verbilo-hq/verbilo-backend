@@ -57,6 +57,7 @@ export class StaffService {
       email: input.email,
       phone: input.phone ?? null,
       role: input.role as StaffRole,
+      clinicalSpecialty: input.clinicalSpecialty ?? null,
       gdcNumber: input.gdcNumber ?? null,
       startedAt: input.startedAt ? new Date(input.startedAt) : null,
       endedAt: null,
@@ -139,6 +140,9 @@ export class StaffService {
       ...(input.email !== undefined ? { email: input.email } : {}),
       ...(input.phone !== undefined ? { phone: input.phone ?? null } : {}),
       ...(input.role !== undefined ? { role: input.role as StaffRole } : {}),
+      ...(input.clinicalSpecialty !== undefined
+        ? { clinicalSpecialty: input.clinicalSpecialty ?? null }
+        : {}),
       ...(input.gdcNumber !== undefined
         ? { gdcNumber: input.gdcNumber ?? null }
         : {}),

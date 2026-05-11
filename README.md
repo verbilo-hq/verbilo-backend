@@ -1,6 +1,6 @@
 # Verbilo Backend
 
-Verbilo is a multi-tenant intranet SaaS for UK dental group practices. This repository contains the NestJS API, using Prisma against a Neon PostgreSQL database and validating AWS Cognito JWTs, deployed to Render.
+Verbilo is a multi-tenant intranet SaaS for UK multi-site healthcare operators (dental groups, GP federations, vet groups, optical chains, physiotherapy networks, etc.). This repository contains the NestJS API, using Prisma against a Neon PostgreSQL database and validating AWS Cognito JWTs, deployed to Render.
 
 ## Tech stack (canonical)
 
@@ -46,7 +46,9 @@ At the database level:
 - `User` belongs to a `Tenant` and may optionally belong to a `Site`.
 - The Cognito `sub` claim is stored as `User.cognitoId` and is the lookup key for `GET /users/me`.
 - `Patient` belongs to a `Tenant` and a `Site` (both cascade-delete), with NHS number, DOB, registered GP, and a JSONB allergies array. Indexed on `(tenantId, siteId, surname)` for the typical search pattern.
-- `Appointment` references `Patient`, `Site`, and a `User` for the dentist (`AppointmentStatus` enum: `scheduled / confirmed / in_progress / completed / no_show / cancelled`). Indexed on `(siteId, startsAt)` for day-view queries. The `dentistId` FK will move to `StaffMember` once VER-23 ships.
+- `Appointment` references `Patient`, `Site`, and a `User` for the practitioner (`AppointmentStatus` enum: `scheduled / confirmed / in_progress / completed / no_show / cancelled`). Indexed on `(siteId, startsAt)` for day-view queries. The `practitionerId` FK will move to `StaffMember` in a VER-47 follow-up once VER-27/StaffMember linkage lands.
+
+**Sector enum** — `Tenant.sector` is one of `dental, gp, vets, physio, optometry, other, healthcare` (the last is a sector-agnostic fallback used as the default when none is provided). Sector-specific features (e.g. CQC compliance, GDC validation) gate behind `Tenant.enabledModules` rather than `sector` directly.
 
 ### GDPR endpoints
 

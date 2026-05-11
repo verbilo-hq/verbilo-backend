@@ -1,6 +1,7 @@
 import {
   ArrayMaxSize,
   IsArray,
+  IsIn,
   IsNotEmpty,
   IsObject,
   IsOptional,
@@ -17,6 +18,7 @@ export class UpdateTenantDto {
 
   @IsOptional()
   @IsString()
+  @IsIn(['dental', 'gp', 'vets', 'physio', 'optometry', 'other', 'healthcare'])
   @MaxLength(64)
   sector?: string;
 
@@ -30,4 +32,3 @@ export class UpdateTenantDto {
   @IsObject()
   settings?: Record<string, unknown>;
 }
-

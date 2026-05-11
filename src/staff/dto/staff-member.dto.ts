@@ -30,6 +30,9 @@ export class StaffMemberDto {
   role!: StaffRole;
 
   @Expose()
+  clinicalSpecialty!: string | null;
+
+  @Expose()
   gdcNumber!: string | null;
 
   @Expose()
@@ -47,4 +50,3 @@ export class StaffMemberDto {
   @Expose()
   updatedAt!: Date;
 }
-
