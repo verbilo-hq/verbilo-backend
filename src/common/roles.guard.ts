@@ -50,8 +50,8 @@ export class RolesGuard implements CanActivate {
   private async findDbUser(
     cognitoId: string,
   ): Promise<DbUserRequestContext | undefined> {
-    const dbUser = await this.prisma.user.findUnique({
-      where: { cognitoId },
+    const dbUser = await this.prisma.user.findFirst({
+      where: { cognitoId, deletedAt: null },
       select: {
         id: true,
         cognitoId: true,

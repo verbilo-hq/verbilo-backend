@@ -2,8 +2,8 @@ import {
   Body,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
-  NotFoundException,
   Param,
   Patch,
   Post,
@@ -42,7 +42,9 @@ export class StaffController {
   ) {
     const tenantId = request.dbUser?.tenantId;
     if (!tenantId) {
-      throw new NotFoundException('Tenant not found');
+      throw new ForbiddenException(
+        'Platform admin must act on a specific tenant context',
+      );
     }
 
     const staff = await this.staffService.listStaffMembers(
@@ -62,7 +64,9 @@ export class StaffController {
   ) {
     const tenantId = request.dbUser?.tenantId;
     if (!tenantId) {
-      throw new NotFoundException('Tenant not found');
+      throw new ForbiddenException(
+        'Platform admin must act on a specific tenant context',
+      );
     }
 
     const staffMember = await this.staffService.createStaffMember(tenantId, body);
@@ -76,7 +80,9 @@ export class StaffController {
   async getStaff(@Param('id') id: string, @Req() request: StaffRequest) {
     const tenantId = request.dbUser?.tenantId;
     if (!tenantId) {
-      throw new NotFoundException('Tenant not found');
+      throw new ForbiddenException(
+        'Platform admin must act on a specific tenant context',
+      );
     }
 
     const staffMember = await this.staffService.getStaffMember(tenantId, id);
@@ -94,7 +100,9 @@ export class StaffController {
   ) {
     const tenantId = request.dbUser?.tenantId;
     if (!tenantId) {
-      throw new NotFoundException('Tenant not found');
+      throw new ForbiddenException(
+        'Platform admin must act on a specific tenant context',
+      );
     }
 
     const staffMember = await this.staffService.updateStaffMember(
@@ -112,7 +120,9 @@ export class StaffController {
   async deleteStaff(@Param('id') id: string, @Req() request: StaffRequest) {
     const tenantId = request.dbUser?.tenantId;
     if (!tenantId) {
-      throw new NotFoundException('Tenant not found');
+      throw new ForbiddenException(
+        'Platform admin must act on a specific tenant context',
+      );
     }
 
     const staffMember = await this.staffService.archiveStaffMember(tenantId, id);
@@ -122,4 +132,3 @@ export class StaffController {
     });
   }
 }
-

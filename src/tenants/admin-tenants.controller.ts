@@ -1,7 +1,9 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
+  HttpCode,
   Param,
   Patch,
   Post,
@@ -61,5 +63,12 @@ export class AdminTenantsController {
     @Req() request: AdminRequest,
   ) {
     return this.tenantsService.updateTenant(id, body, request.dbUser?.id);
+  }
+
+  @Delete(':id')
+  @HttpCode(204)
+  @Roles('verbilo_super_admin')
+  deleteTenant(@Param('id') id: string, @Req() request: AdminRequest): Promise<void> {
+    return this.tenantsService.deleteTenant(id, request.dbUser?.id);
   }
 }

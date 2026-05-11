@@ -11,7 +11,7 @@ export type TenantRequestContext = {
 export type DbUserRequestContext = {
   id: string;
   cognitoId: string;
-  tenantId: string;
+  tenantId: string | null;
   siteId: string | null;
   role: UserRole;
 };
