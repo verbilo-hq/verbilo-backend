@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
@@ -11,10 +12,10 @@ import {
   isValidSlug,
   normalizeSlug,
 } from '../common/slug';
+import { VercelDomainsClient } from '../integrations/vercel/vercel-domains.client';
 import { PrismaService } from '../prisma/prisma.service';
 
 const ENABLED_MODULE_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
-const TENANT_BASE_DOMAIN = 'verbilo.co.uk';
 
 type SlugAvailability =
   | { available: true }
@@ -37,9 +38,12 @@ export type UpdateTenantInput = {
 
 @Injectable()
 export class TenantsService {
+  private readonly logger = new Logger(TenantsService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly vercelDomains: VercelDomainsClient,
   ) {}
 
   async createTenant(input: CreateTenantInput, actorUserId?: string) {
@@ -74,6 +78,40 @@ export class TenantsService {
           enabledModules: tenant.enabledModules,
         },
       });
+
+      try {
+        const result = await this.vercelDomains.provisionTenantDomain(
+          tenant.slug,
+          'main',
+        );
+
+        await this.audit.record({
+          actorUserId,
+          tenantId: tenant.id,
+          action: 'tenant.domain.provisioned',
+          entityType: 'tenant',
+          entityId: tenant.id,
+          payload: {
+            outcome: result,
+          } as Prisma.InputJsonValue,
+        });
+      } catch (error) {
+        const hostname = this.vercelDomains.hostnameForSlug(tenant.slug);
+        const message = error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(`Vercel domain provision failed for ${hostname}: ${message}`);
+
+        await this.audit.record({
+          actorUserId,
+          tenantId: tenant.id,
+          action: 'tenant.domain.provision_failed',
+          entityType: 'tenant',
+          entityId: tenant.id,
+          payload: {
+            hostname,
+            error: message,
+          } as Prisma.InputJsonValue,
+        });
+      }
 
       return this.withTenantUrl(tenant);
     } catch (error) {
@@ -349,7 +387,7 @@ export class TenantsService {
   private withTenantUrl<T extends { slug: string }>(tenant: T) {
     return {
       ...tenant,
-      url: `https://${tenant.slug}.${TENANT_BASE_DOMAIN}`,
+      url: `https://${this.vercelDomains.hostnameForSlug(tenant.slug)}`,
     };
   }
 
