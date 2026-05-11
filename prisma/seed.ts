@@ -99,10 +99,27 @@ async function seedCognitoUser(targetSlug: string) {
     return;
   }
 
-  const tenant =
-    (await prisma.tenant.findUnique({ where: { slug: targetSlug } })) ??
-    (await prisma.tenant.findFirst());
-
+  // Look up the target tenant. If SEED_TENANT_SLUG is explicit AND not found,
+  // auto-create it with the optional SEED_TENANT_NAME / SEED_TENANT_SECTOR
+  // env vars — this is how we provision internal-admin sentinel tenants
+  // (e.g. "verbilo-hq") without dragging them into the demo set.
+  let tenant = await prisma.tenant.findUnique({ where: { slug: targetSlug } });
+  if (!tenant) {
+    const explicitSlug = process.env.SEED_TENANT_SLUG;
+    if (explicitSlug && explicitSlug === targetSlug) {
+      const name = process.env.SEED_TENANT_NAME ?? explicitSlug;
+      const sector = (process.env.SEED_TENANT_SECTOR ?? 'other') as
+        | 'dental' | 'gp' | 'vets' | 'physio' | 'optometry' | 'other' | 'healthcare';
+      tenant = await prisma.tenant.create({
+        data: { slug: explicitSlug, name, sector, enabledModules: [] },
+      });
+      console.log(
+        `[seed] ✓ created target tenant (didn't exist): ${tenant.slug} (${tenant.sector})`,
+      );
+    } else {
+      tenant = await prisma.tenant.findFirst();
+    }
+  }
   if (!tenant) {
     throw new Error('No tenant available to pair the user to.');
   }
@@ -183,12 +200,25 @@ async function maybeSeedFromLegacyEnv() {
 }
 
 async function main() {
-  console.log(`[seed] upserting ${DEMO_TENANTS.length} demo tenants…`);
-  for (const t of DEMO_TENANTS) {
-    const tenant = await upsertDemoTenant(t);
+  // Skip the four demo tenants when staging has been narrowed to a single
+  // test tenant (see `prisma/reset-staging.ts`) — otherwise re-running the
+  // seed to pair an admin user re-creates the demos and undoes the reset.
+  // Defaults to "no": demos are upserted unless SEED_SKIP_DEMOS=1.
+  const skipDemos = ['1', 'true', 'yes'].includes(
+    (process.env.SEED_SKIP_DEMOS ?? '').toLowerCase(),
+  );
+  if (skipDemos) {
     console.log(
-      `[seed] ✓ ${tenant.slug.padEnd(20)} (${tenant.sector.padEnd(10)}) ${tenant.name}`,
+      `[seed] SEED_SKIP_DEMOS set — skipping demo tenant upserts.`,
     );
+  } else {
+    console.log(`[seed] upserting ${DEMO_TENANTS.length} demo tenants…`);
+    for (const t of DEMO_TENANTS) {
+      const tenant = await upsertDemoTenant(t);
+      console.log(
+        `[seed] ✓ ${tenant.slug.padEnd(20)} (${tenant.sector.padEnd(10)}) ${tenant.name}`,
+      );
+    }
   }
 
   const legacySlug = await maybeSeedFromLegacyEnv();
