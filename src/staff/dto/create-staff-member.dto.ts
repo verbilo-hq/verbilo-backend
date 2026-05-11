@@ -34,6 +34,11 @@ export class CreateStaffMemberDto {
   role!: StaffRole;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  clinicalSpecialty?: string;
+
+  @IsOptional()
   @IsUUID()
   siteId?: string;
 
@@ -50,4 +55,3 @@ export class CreateStaffMemberDto {
   @IsDateString()
   startedAt?: string;
 }
-

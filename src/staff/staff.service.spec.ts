@@ -51,11 +51,42 @@ describe('StaffService', () => {
         firstName: 'Alice',
         surname: 'Example',
         email: 'alice@example.com',
-        role: 'dentist',
+        role: 'clinician',
       } as any),
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(staffCreate).not.toHaveBeenCalled();
+  });
+
+  it('forwards clinicalSpecialty on create and update', async () => {
+    staffFindFirst.mockResolvedValueOnce(null);
+    staffCreate.mockResolvedValueOnce({ id: 'staff-1' });
+
+    await service.createStaffMember('tenant-1', {
+      firstName: 'Alice',
+      surname: 'Example',
+      email: 'alice@example.com',
+      role: 'clinician',
+      clinicalSpecialty: 'Physiotherapist',
+    } as any);
+
+    expect(staffCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        clinicalSpecialty: 'Physiotherapist',
+      }),
+    });
+
+    staffFindFirst.mockResolvedValueOnce({ id: 'staff-1' });
+    staffUpdate.mockResolvedValueOnce({ id: 'staff-1' });
+
+    await service.updateStaffMember('tenant-1', 'staff-1', {
+      clinicalSpecialty: 'Physio',
+    } as any);
+
+    expect(staffUpdate).toHaveBeenCalledWith({
+      where: { id: 'staff-1' },
+      data: { clinicalSpecialty: 'Physio' },
+    });
   });
 
   it('prevents cross-tenant access by returning not found', async () => {
@@ -106,4 +137,3 @@ describe('StaffService', () => {
     });
   });
 });
-

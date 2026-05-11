@@ -19,17 +19,17 @@ enum AppointmentStatus {
 enum StaffRole {
   admin
   manager
-  dentist
-  hygienist
-  nurse
-  receptionist
+  clinician
+  clinical_support
+  reception
+  admin_support
 }
 
 model Tenant {
   id             String        @id @default(uuid()) @db.Uuid
   name           String
   slug           String        @unique
-  sector         String        @default("dental")
+  sector         String        @default("healthcare")
   enabledModules String[]      @default([])
   settings       Json          @default("{}")
   archivedAt     DateTime?
@@ -62,7 +62,7 @@ model User {
   site                  Site?         @relation(fields: [siteId], references: [id])
   createdAt             DateTime      @default(now())
   deletedAt             DateTime?
-  appointmentsAsDentist Appointment[]
+  appointmentsAsPractitioner Appointment[]
   staffMember           StaffMember?
 }
 
@@ -95,7 +95,7 @@ model Appointment {
   id        String            @id @default(uuid()) @db.Uuid
   patientId String            @db.Uuid
   siteId    String            @db.Uuid
-  dentistId String            @db.Uuid
+  practitionerId String       @db.Uuid
   startsAt  DateTime
   endsAt    DateTime
   status    AppointmentStatus @default(scheduled)
@@ -105,8 +105,8 @@ model Appointment {
 
   patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
   site    Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
-  // TODO: when StaffMember lands (VER-23), switch this FK.
-  dentist User    @relation(fields: [dentistId], references: [id])
+  // TODO (VER-47 follow-up): switch FK to StaffMember once VER-27/StaffMember linkage lands.
+  practitioner User @relation(fields: [practitionerId], references: [id])
 
   @@index([siteId, startsAt])
 }
@@ -121,6 +121,7 @@ model StaffMember {
   email      String
   phone      String?
   role       StaffRole
+  clinicalSpecialty String?
   gdcNumber  String?
   startedAt  DateTime?
   endedAt    DateTime?

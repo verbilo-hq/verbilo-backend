@@ -35,6 +35,11 @@ export class UpdateStaffMemberDto {
   role?: StaffRole;
 
   @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  clinicalSpecialty?: string;
+
+  @IsOptional()
   @IsUUID()
   siteId?: string;
 
