@@ -19,6 +19,7 @@ import { TenantsModule } from './tenants/tenants.module';
 import { AppConfigModule } from './config/config.module';
 import { HealthModule } from './health/health.module';
 import { StaffModule } from './staff/staff.module';
+import { DashboardModule } from './dashboard/dashboard.module';
 
 @Module({
   imports: [
@@ -29,6 +30,7 @@ import { StaffModule } from './staff/staff.module';
     UsersModule,
     TenantsModule,
     StaffModule,
+    DashboardModule,
     HealthModule,
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 60 }]),
   ],
