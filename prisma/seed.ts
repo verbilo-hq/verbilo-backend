@@ -99,10 +99,27 @@ async function seedCognitoUser(targetSlug: string) {
     return;
   }
 
-  const tenant =
-    (await prisma.tenant.findUnique({ where: { slug: targetSlug } })) ??
-    (await prisma.tenant.findFirst());
-
+  // Look up the target tenant. If SEED_TENANT_SLUG is explicit AND not found,
+  // auto-create it with the optional SEED_TENANT_NAME / SEED_TENANT_SECTOR
+  // env vars — this is how we provision internal-admin sentinel tenants
+  // (e.g. "verbilo-hq") without dragging them into the demo set.
+  let tenant = await prisma.tenant.findUnique({ where: { slug: targetSlug } });
+  if (!tenant) {
+    const explicitSlug = process.env.SEED_TENANT_SLUG;
+    if (explicitSlug && explicitSlug === targetSlug) {
+      const name = process.env.SEED_TENANT_NAME ?? explicitSlug;
+      const sector = (process.env.SEED_TENANT_SECTOR ?? 'other') as
+        | 'dental' | 'gp' | 'vets' | 'physio' | 'optometry' | 'other' | 'healthcare';
+      tenant = await prisma.tenant.create({
+        data: { slug: explicitSlug, name, sector, enabledModules: [] },
+      });
+      console.log(
+        `[seed] ✓ created target tenant (didn't exist): ${tenant.slug} (${tenant.sector})`,
+      );
+    } else {
+      tenant = await prisma.tenant.findFirst();
+    }
+  }
   if (!tenant) {
     throw new Error('No tenant available to pair the user to.');
   }
