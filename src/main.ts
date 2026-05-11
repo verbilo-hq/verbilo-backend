@@ -1,4 +1,6 @@
-import { NestFactory } from '@nestjs/core';
+import './instrument';
+
+import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 
 type CorsOriginCallback = (error: Error | null, allow?: boolean) => void;
@@ -41,6 +43,13 @@ function isAllowedCorsOrigin(origin: string | undefined) {
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  if (process.env.SENTRY_DSN) {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { SentryGlobalFilter } = require('@sentry/nestjs/setup');
+    app.useGlobalFilters(new SentryGlobalFilter(app.get(HttpAdapterHost)));
+  }
+
   app.enableCors({
     origin(origin: string | undefined, callback: CorsOriginCallback) {
       callback(null, isAllowedCorsOrigin(origin));
