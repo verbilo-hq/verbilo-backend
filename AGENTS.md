@@ -8,7 +8,7 @@ See `README.md` for the canonical workflow and deployment model. In short: featu
 
 ## Project Context
 
-- App: Verbilo, a multi-tenant intranet SaaS for UK dental group practices.
+- App: Verbilo, a multi-tenant intranet SaaS for UK multi-site healthcare operators (dental groups, GP federations, vet groups, optical chains, physiotherapy networks, etc.). `Tenant.sector` is one of `dental, gp, vets, physio, optometry, other, healthcare` — UI chrome adapts via `src/lib/sector.js` on the frontend, sector-specific features gate via `Tenant.enabledModules`.
 - Repository: NestJS API deployed to Render.
 - Database: Neon PostgreSQL accessed through Prisma.
 - Authentication: AWS Cognito JWT validation via JWKS. The frontend sends Cognito ID tokens as `Authorization: Bearer <token>`.
@@ -21,7 +21,7 @@ See `README.md` for the canonical workflow and deployment model. In short: featu
 - Production start: `npm run start:prod`
 - Prisma validate: `npx prisma validate`
 - Prisma generate: `npx prisma generate`
-- Seed local/dev database: `SEED_USERNAME=<username> SEED_COGNITO_SUB=<uuid> npm run seed`
+- Seed local/dev database: `npm run seed` (always upserts cross-sector demo tenants — dental/vets/optometry/GP — idempotent by slug). Optionally set `SEED_USERNAME` + `SEED_COGNITO_SUB` to pair a Cognito user; defaults to SmileCo. Override the pairing target with `SEED_TENANT_SLUG=riverside-vets` etc.
 
 Run `npm run build` after source changes. For Prisma schema changes, also run `npx prisma validate`. Documentation-only changes do not require a build.
 
@@ -40,12 +40,11 @@ Required or supported variables:
 - `SENTRY_DSN`: Optional Sentry DSN.
 - `PORT`: Runtime port. Render injects this automatically in production.
 
-Seed-only variables:
+Seed-only variables (all optional):
 
-- `SEED_TENANT_NAME`: Optional; defaults to `Verbilo Dev Tenant`.
-- `SEED_SITE_NAME`: Optional; defaults to `Dev Site`.
-- `SEED_USERNAME`: Required for `npm run seed`.
-- `SEED_COGNITO_SUB`: Required for `npm run seed`; must match the Cognito user `sub` claim.
+- `SEED_USERNAME` / `SEED_COGNITO_SUB`: When both are set, the seed pairs a User row to one of the demo tenants; otherwise the seed just upserts the demo tenants without creating a user.
+- `SEED_TENANT_SLUG`: Tenant slug to pair the user to (default `smileco`). Useful for testing non-dental flows — e.g. `SEED_TENANT_SLUG=riverside-vets`.
+- `SEED_TENANT_NAME` / `SEED_SITE_NAME`: Legacy single-tenant pre-VER-47 vars. Still honoured for backward compat — if set, the tenant is upserted and used as the pairing target.
 
 All runtime config should be read via Nest `ConfigService` (validated by `src/config/env.schema.ts`). Only pre-boot code (e.g. `src/instrument.ts`) and standalone scripts (e.g. `prisma/seed.ts`) should read `process.env` directly. Do not hardcode pool ids, URLs, connection strings, or origins in source files.
 

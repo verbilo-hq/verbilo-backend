@@ -45,7 +45,10 @@ export class TenantsService {
   async createTenant(input: CreateTenantInput, actorUserId?: string) {
     const name = this.readRequiredString(input.name, 'name');
     const slug = await this.validateNewSlug(input.slug);
-    const sector = this.readOptionalString(input.sector, 'sector') ?? 'dental';
+    // Defaults to 'healthcare' (sector-agnostic) when none is provided — see
+    // VER-47. The CreateTenantDto requires sector at the API boundary; this
+    // fallback only fires for non-HTTP callers (e.g. seeds, internal tooling).
+    const sector = this.readOptionalString(input.sector, 'sector') ?? 'healthcare';
     const enabledModules = this.readEnabledModules(input.enabledModules) ?? [];
 
     try {
