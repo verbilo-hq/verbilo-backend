@@ -1,7 +1,7 @@
 import { Injectable, Logger, NestMiddleware } from '@nestjs/common';
 import { NextFunction, Request, Response } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
-import { TenantRequestContext } from './request-context';
+import { TenantRequestContext, TenantSlugSource } from './request-context';
 import { isReservedSubdomain, isValidSlug, normalizeSlug } from './slug';
 
 const VERBILO_DOMAIN = 'verbilo.co.uk';
@@ -9,6 +9,12 @@ const VERBILO_DOMAIN_SUFFIX = `.${VERBILO_DOMAIN}`;
 
 type TenantContextRequest = Request & {
   tenant?: TenantRequestContext;
+  tenantSlugSource?: TenantSlugSource;
+};
+
+type TenantSlugResolution = {
+  slug: string;
+  source: TenantSlugSource;
 };
 
 @Injectable()
@@ -22,16 +28,20 @@ export class TenantContextMiddleware implements NestMiddleware {
     _response: Response,
     next: NextFunction,
   ) {
-    const slug = this.getTenantSlug(request);
+    const tenantSlug = this.getTenantSlug(request);
 
-    if (!slug || isReservedSubdomain(slug) || !isValidSlug(slug)) {
+    if (
+      !tenantSlug ||
+      isReservedSubdomain(tenantSlug.slug) ||
+      !isValidSlug(tenantSlug.slug)
+    ) {
       next();
       return;
     }
 
     try {
       const tenant = await this.prisma.tenant.findUnique({
-        where: { slug },
+        where: { slug: tenantSlug.slug },
         select: {
           id: true,
           slug: true,
@@ -43,6 +53,7 @@ export class TenantContextMiddleware implements NestMiddleware {
 
       if (tenant) {
         request.tenant = tenant;
+        request.tenantSlugSource = tenantSlug.source;
       }
     } catch (error) {
       const message =
@@ -53,14 +64,15 @@ export class TenantContextMiddleware implements NestMiddleware {
     next();
   }
 
-  private getTenantSlug(request: Request): string | undefined {
+  private getTenantSlug(request: Request): TenantSlugResolution | undefined {
     const headerSlug = request.header('x-tenant-slug');
 
     if (headerSlug) {
-      return normalizeSlug(headerSlug);
+      return { slug: normalizeSlug(headerSlug), source: 'header' };
     }
 
-    return this.getSlugFromHost(request.header('host'));
+    const hostSlug = this.getSlugFromHost(request.header('host'));
+    return hostSlug ? { slug: hostSlug, source: 'host' } : undefined;
   }
 
   private getSlugFromHost(hostHeader: string | undefined): string | undefined {
