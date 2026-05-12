@@ -32,6 +32,10 @@ model Tenant {
   sector         String        @default("healthcare")
   enabledModules String[]      @default([])
   settings       Json          @default("{}")
+  logoUrl        String?
+  primaryColor   String?       @db.VarChar(9)
+  secondaryColor String?       @db.VarChar(9)
+  accentColor    String?       @db.VarChar(9)
   archivedAt     DateTime?
   createdAt      DateTime      @default(now())
   sites          Site[]
@@ -41,31 +45,31 @@ model Tenant {
 }
 
 model Site {
-  id           String        @id @default(uuid()) @db.Uuid
-  name         String
-  tenantId     String        @db.Uuid
-  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  users        User[]
+  id              String               @id @default(uuid()) @db.Uuid
+  name            String
+  tenantId        String               @db.Uuid
+  tenant          Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  users           User[]
   siteAssignments UserSiteAssignment[]
-  patients     Patient[]
-  appointments Appointment[]
-  staff        StaffMember[]
+  patients        Patient[]
+  appointments    Appointment[]
+  staff           StaffMember[]
 }
 
 model User {
-  id                    String        @id @default(uuid()) @db.Uuid
-  username              String        @unique
-  cognitoId             String?       @unique
-  tenantId              String?       @db.Uuid
-  siteId                String?       @db.Uuid
-  role                  String        @default("employee")
-  tenant                Tenant?       @relation(fields: [tenantId], references: [id], onDelete: SetNull)
-  site                  Site?         @relation(fields: [siteId], references: [id])
-  createdAt             DateTime      @default(now())
-  deletedAt             DateTime?
-  siteAssignments       UserSiteAssignment[]
+  id                         String               @id @default(uuid()) @db.Uuid
+  username                   String               @unique
+  cognitoId                  String?              @unique
+  tenantId                   String?              @db.Uuid
+  siteId                     String?              @db.Uuid
+  role                       String               @default("employee")
+  tenant                     Tenant?              @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+  site                       Site?                @relation(fields: [siteId], references: [id])
+  createdAt                  DateTime             @default(now())
+  deletedAt                  DateTime?
+  siteAssignments            UserSiteAssignment[]
   appointmentsAsPractitioner Appointment[]
-  staffMember           StaffMember?
+  staffMember                StaffMember?
 }
 
 model UserSiteAssignment {
@@ -107,42 +111,42 @@ model Patient {
 }
 
 model Appointment {
-  id        String            @id @default(uuid()) @db.Uuid
-  patientId String            @db.Uuid
-  siteId    String            @db.Uuid
-  practitionerId String       @db.Uuid
-  startsAt  DateTime
-  endsAt    DateTime
-  status    AppointmentStatus @default(scheduled)
-  notes     String?
-  createdAt DateTime          @default(now())
-  updatedAt DateTime          @updatedAt
+  id             String            @id @default(uuid()) @db.Uuid
+  patientId      String            @db.Uuid
+  siteId         String            @db.Uuid
+  practitionerId String            @db.Uuid
+  startsAt       DateTime
+  endsAt         DateTime
+  status         AppointmentStatus @default(scheduled)
+  notes          String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
 
-  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  site    Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
+  patient      Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  site         Site    @relation(fields: [siteId], references: [id], onDelete: Cascade)
   // TODO (VER-47 follow-up): switch FK to StaffMember once VER-27/StaffMember linkage lands.
-  practitioner User @relation(fields: [practitionerId], references: [id])
+  practitioner User    @relation(fields: [practitionerId], references: [id])
 
   @@index([siteId, startsAt])
 }
 
 model StaffMember {
-  id         String    @id @default(uuid()) @db.Uuid
-  tenantId   String    @db.Uuid
-  siteId     String?   @db.Uuid
-  userId     String?   @unique @db.Uuid
-  firstName  String
-  surname    String
-  email      String
-  phone      String?
-  role       StaffRole
+  id                String    @id @default(uuid()) @db.Uuid
+  tenantId          String    @db.Uuid
+  siteId            String?   @db.Uuid
+  userId            String?   @unique @db.Uuid
+  firstName         String
+  surname           String
+  email             String
+  phone             String?
+  role              StaffRole
   clinicalSpecialty String?
-  gdcNumber  String?
-  startedAt  DateTime?
-  endedAt    DateTime?
-  archivedAt DateTime?
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  gdcNumber         String?
+  startedAt         DateTime?
+  endedAt           DateTime?
+  archivedAt        DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   site   Site?  @relation(fields: [siteId], references: [id], onDelete: SetNull)

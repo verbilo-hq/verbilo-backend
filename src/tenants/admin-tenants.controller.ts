@@ -22,6 +22,7 @@ import { Roles } from '../common/roles.decorator';
 import { RolesGuard } from '../common/roles.guard';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { TenantSlugQueryDto } from './dto/tenant-slug.dto';
+import { UpdateTenantBrandingDto } from './dto/update-tenant-branding.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { TenantsService } from './tenants.service';
 
@@ -38,10 +39,7 @@ export class AdminTenantsController {
 
   @Post()
   @RequiresCapability(CAPABILITIES.TENANT_CREATE)
-  createTenant(
-    @Body() body: CreateTenantDto,
-    @Req() request: AdminRequest,
-  ) {
+  createTenant(@Body() body: CreateTenantDto, @Req() request: AdminRequest) {
     return this.tenantsService.createTenant(body, request.dbUser);
   }
 
@@ -70,11 +68,30 @@ export class AdminTenantsController {
     return this.tenantsService.updateTenant(id, body, request.dbUser);
   }
 
+  @Patch(':id/branding')
+  @RequiresCapability(CAPABILITIES.TENANT_UPDATE_BRANDING)
+  @Roles(
+    'verbilo_super_admin',
+    'verbilo_support',
+    'company_owner',
+    'company_admin',
+  )
+  updateBranding(
+    @Param('id') id: string,
+    @Body() body: UpdateTenantBrandingDto,
+    @Req() request: AdminRequest,
+  ) {
+    return this.tenantsService.updateBranding(id, body, request.dbUser);
+  }
+
   @Delete(':id')
   @HttpCode(204)
   @Roles('verbilo_super_admin')
   @RequiresCapability(CAPABILITIES.TENANT_DELETE)
-  deleteTenant(@Param('id') id: string, @Req() request: AdminRequest): Promise<void> {
+  deleteTenant(
+    @Param('id') id: string,
+    @Req() request: AdminRequest,
+  ): Promise<void> {
     return this.tenantsService.deleteTenant(id, request.dbUser);
   }
 }

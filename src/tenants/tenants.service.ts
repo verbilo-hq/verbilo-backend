@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
@@ -9,7 +10,7 @@ import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
 import { CAPABILITIES, type Capability } from '../common/capabilities';
 import { type DbUserRequestContext } from '../common/request-context';
-import { resolveActorScope } from '../common/scope';
+import { canActOnTarget, resolveActorScope } from '../common/scope';
 import {
   isReservedSubdomain,
   isValidSlug,
@@ -20,6 +21,14 @@ import { VercelDomainsClient } from '../integrations/vercel/vercel-domains.clien
 import { PrismaService } from '../prisma/prisma.service';
 
 const ENABLED_MODULE_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
+const BRANDING_FIELDS = [
+  'logoUrl',
+  'primaryColor',
+  'secondaryColor',
+  'accentColor',
+] as const;
+
+type TenantBrandingField = (typeof BRANDING_FIELDS)[number];
 
 type SlugAvailability =
   | { available: true }
@@ -39,6 +48,10 @@ export type UpdateTenantInput = {
   enabledModules?: unknown;
   settings?: unknown;
 };
+
+export type UpdateTenantBrandingInput = Partial<
+  Record<TenantBrandingField, string | null>
+>;
 
 @Injectable()
 export class TenantsService {
@@ -307,10 +320,87 @@ export class TenantsService {
     return this.withTenantUrl(updatedTenant);
   }
 
-  async deleteTenant(
+  /**
+   * Applies tenant branding changes.
+   *
+   * Undefined fields are unchanged. Null clears that branding field. Empty or
+   * whitespace-only strings are treated as "leave unchanged" so frontend forms
+   * can submit blank inputs without clearing existing branding accidentally.
+   */
+  async updateBranding(
     id: string,
+    branding: UpdateTenantBrandingInput,
     actor?: DbUserRequestContext,
-  ): Promise<void> {
+  ) {
+    const existingTenant = await this.prisma.tenant.findUnique({
+      where: { id },
+    });
+
+    if (!existingTenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    this.assertActorCanActOnTenant(actor, id);
+
+    const data: Prisma.TenantUpdateInput = {};
+    const diff: Record<
+      TenantBrandingField,
+      { from: string | null; to: string | null }
+    > = {} as Record<
+      TenantBrandingField,
+      { from: string | null; to: string | null }
+    >;
+
+    for (const field of BRANDING_FIELDS) {
+      const value = branding[field];
+
+      if (value === undefined) {
+        continue;
+      }
+
+      const nextValue = value === null ? null : value.trim();
+
+      if (nextValue === '') {
+        continue;
+      }
+
+      if (nextValue !== existingTenant[field]) {
+        data[field] = nextValue;
+        diff[field] = { from: existingTenant[field], to: nextValue };
+      }
+    }
+
+    if (!Object.keys(diff).length) {
+      throw new BadRequestException('No tenant branding changes provided');
+    }
+
+    const updatedTenant = await this.prisma.tenant.update({
+      where: { id },
+      data,
+    });
+
+    await this.audit.record({
+      actorUserId: actor?.id,
+      tenantId: updatedTenant.id,
+      action: 'tenant.branding.updated',
+      entityType: 'tenant',
+      entityId: updatedTenant.id,
+      payload: {
+        diff,
+        ...this.authorizationAuditPayload(
+          actor,
+          CAPABILITIES.TENANT_UPDATE_BRANDING,
+          {
+            tenantId: updatedTenant.id,
+          },
+        ),
+      } as Prisma.InputJsonValue,
+    });
+
+    return this.withTenantUrl(updatedTenant);
+  }
+
+  async deleteTenant(id: string, actor?: DbUserRequestContext): Promise<void> {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id },
     });
@@ -338,9 +428,13 @@ export class TenantsService {
           entityId: tenant.id,
           payloadJson: {
             snapshot,
-            ...this.authorizationAuditPayload(actor, CAPABILITIES.TENANT_DELETE, {
-              tenantId: tenant.id,
-            }),
+            ...this.authorizationAuditPayload(
+              actor,
+              CAPABILITIES.TENANT_DELETE,
+              {
+                tenantId: tenant.id,
+              },
+            ),
           } as Prisma.InputJsonValue,
         },
       });
@@ -425,6 +519,10 @@ export class TenantsService {
         name: true,
         sector: true,
         enabledModules: true,
+        logoUrl: true,
+        primaryColor: true,
+        secondaryColor: true,
+        accentColor: true,
       },
     });
 
@@ -433,6 +531,24 @@ export class TenantsService {
     }
 
     return tenant;
+  }
+
+  private assertActorCanActOnTenant(
+    actor: DbUserRequestContext | undefined,
+    tenantId: string,
+  ) {
+    if (!actor) {
+      throw new ForbiddenException('Actor unresolved');
+    }
+
+    const actorScope = resolveActorScope(actor);
+    if (!actorScope) {
+      throw new ForbiddenException('Actor scope unresolved');
+    }
+
+    if (!canActOnTarget(actorScope, { tenantId })) {
+      throw new ForbiddenException('Actor scope cannot target tenant');
+    }
   }
 
   private authorizationAuditPayload(
