@@ -1,5 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
+import { CAPABILITIES } from '../common/capabilities';
+import { REQUIRES_CAPABILITY_KEY } from '../common/requires-capability.decorator';
 import { ROLES_KEY } from '../common/roles.decorator';
 import { AdminUsersController } from './admin-users.controller';
 import { AdminUsersService } from './admin-users.service';
@@ -12,6 +14,16 @@ describe('AdminUsersController', () => {
     updateUserRole: jest.Mock;
     disableUser: jest.Mock;
     enableUser: jest.Mock;
+    assignUserSite: jest.Mock;
+    unassignUserSite: jest.Mock;
+  };
+  const actor = {
+    id: 'actor-user-id',
+    cognitoId: 'actor-cognito-id',
+    tenantId: null,
+    siteId: null,
+    siteIds: [],
+    role: 'verbilo_super_admin',
   };
 
   beforeEach(() => {
@@ -20,6 +32,8 @@ describe('AdminUsersController', () => {
       updateUserRole: jest.fn(),
       disableUser: jest.fn(),
       enableUser: jest.fn(),
+      assignUserSite: jest.fn(),
+      unassignUserSite: jest.fn(),
     };
 
     controller = new AdminUsersController(service as unknown as AdminUsersService);
@@ -32,7 +46,7 @@ describe('AdminUsersController', () => {
     ]);
   });
 
-  it('restricts write handlers to verbilo_super_admin', () => {
+  it('declares write handler role restrictions', () => {
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
@@ -45,6 +59,69 @@ describe('AdminUsersController', () => {
     expect(
       Reflect.getMetadata(ROLES_KEY, AdminUsersController.prototype.enableUser),
     ).toEqual(['verbilo_super_admin']);
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        AdminUsersController.prototype.assignUserSite,
+      ),
+    ).toEqual([
+      'verbilo_super_admin',
+      'verbilo_support',
+      'company_owner',
+      'company_admin',
+      'area_manager',
+    ]);
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        AdminUsersController.prototype.unassignUserSite,
+      ),
+    ).toEqual([
+      'verbilo_super_admin',
+      'verbilo_support',
+      'company_owner',
+      'company_admin',
+      'area_manager',
+    ]);
+  });
+
+  it('declares capability requirements on protected handlers', () => {
+    expect(
+      Reflect.getMetadata(
+        REQUIRES_CAPABILITY_KEY,
+        AdminUsersController.prototype.listUsers,
+      ),
+    ).toBe(CAPABILITIES.USERS_LIST);
+    expect(
+      Reflect.getMetadata(
+        REQUIRES_CAPABILITY_KEY,
+        AdminUsersController.prototype.updateUserRole,
+      ),
+    ).toBe(CAPABILITIES.USERS_UPDATE_ROLE);
+    expect(
+      Reflect.getMetadata(
+        REQUIRES_CAPABILITY_KEY,
+        AdminUsersController.prototype.disableUser,
+      ),
+    ).toBe(CAPABILITIES.USERS_DISABLE);
+    expect(
+      Reflect.getMetadata(
+        REQUIRES_CAPABILITY_KEY,
+        AdminUsersController.prototype.enableUser,
+      ),
+    ).toBe(CAPABILITIES.USERS_DISABLE);
+    expect(
+      Reflect.getMetadata(
+        REQUIRES_CAPABILITY_KEY,
+        AdminUsersController.prototype.assignUserSite,
+      ),
+    ).toBe(CAPABILITIES.USERS_ASSIGN_SITE);
+    expect(
+      Reflect.getMetadata(
+        REQUIRES_CAPABILITY_KEY,
+        AdminUsersController.prototype.unassignUserSite,
+      ),
+    ).toBe(CAPABILITIES.USERS_ASSIGN_SITE);
   });
 
   it('validates UpdateTenantUserDto roles against USER_ROLES', () => {
@@ -77,7 +154,7 @@ describe('AdminUsersController', () => {
         'tenant-id',
         'user-id',
         { role: 'company_admin' },
-        { dbUser: { id: 'actor-user-id' } } as any,
+        { dbUser: actor } as any,
       ),
     ).resolves.toEqual({ id: 'user-id' });
 
@@ -85,7 +162,7 @@ describe('AdminUsersController', () => {
       'tenant-id',
       'user-id',
       'company_admin',
-      'actor-user-id',
+      actor,
     );
   });
 
@@ -94,14 +171,14 @@ describe('AdminUsersController', () => {
 
     await expect(
       controller.disableUser('tenant-id', 'user-id', {
-        dbUser: { id: 'actor-user-id' },
+        dbUser: actor,
       } as any),
     ).resolves.toBeUndefined();
 
     expect(service.disableUser).toHaveBeenCalledWith(
       'tenant-id',
       'user-id',
-      'actor-user-id',
+      actor,
     );
   });
 
@@ -110,15 +187,48 @@ describe('AdminUsersController', () => {
 
     await expect(
       controller.enableUser('tenant-id', 'user-id', {
-        dbUser: { id: 'actor-user-id' },
+        dbUser: actor,
       } as any),
     ).resolves.toBeUndefined();
 
     expect(service.enableUser).toHaveBeenCalledWith(
       'tenant-id',
       'user-id',
-      'actor-user-id',
+      actor,
+    );
+  });
+
+  it('forwards assignUserSite to the service with actor user id', async () => {
+    service.assignUserSite.mockResolvedValue(undefined);
+
+    await expect(
+      controller.assignUserSite('tenant-id', 'user-id', 'site-id', {
+        dbUser: actor,
+      } as any),
+    ).resolves.toBeUndefined();
+
+    expect(service.assignUserSite).toHaveBeenCalledWith(
+      'tenant-id',
+      'user-id',
+      'site-id',
+      actor,
+    );
+  });
+
+  it('forwards unassignUserSite to the service with actor user id', async () => {
+    service.unassignUserSite.mockResolvedValue(undefined);
+
+    await expect(
+      controller.unassignUserSite('tenant-id', 'user-id', 'site-id', {
+        dbUser: actor,
+      } as any),
+    ).resolves.toBeUndefined();
+
+    expect(service.unassignUserSite).toHaveBeenCalledWith(
+      'tenant-id',
+      'user-id',
+      'site-id',
+      actor,
     );
   });
 });
-

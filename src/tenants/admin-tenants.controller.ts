@@ -14,11 +14,15 @@ import {
 import { Request } from 'express';
 import { CognitoJwtPayload } from '../auth/jwt.strategy';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { CapabilityGuard } from '../common/capability.guard';
+import { CAPABILITIES } from '../common/capabilities';
 import { DbUserRequestContext } from '../common/request-context';
+import { RequiresCapability } from '../common/requires-capability.decorator';
 import { Roles } from '../common/roles.decorator';
 import { RolesGuard } from '../common/roles.guard';
 import { CreateTenantDto } from './dto/create-tenant.dto';
 import { TenantSlugQueryDto } from './dto/tenant-slug.dto';
+import { UpdateTenantBrandingDto } from './dto/update-tenant-branding.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
 import { TenantsService } from './tenants.service';
 
@@ -28,17 +32,15 @@ type AdminRequest = Request & {
 };
 
 @Controller('admin/tenants')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CapabilityGuard)
 @Roles('verbilo_super_admin', 'verbilo_support')
 export class AdminTenantsController {
   constructor(private readonly tenantsService: TenantsService) {}
 
   @Post()
-  createTenant(
-    @Body() body: CreateTenantDto,
-    @Req() request: AdminRequest,
-  ) {
-    return this.tenantsService.createTenant(body, request.dbUser?.id);
+  @RequiresCapability(CAPABILITIES.TENANT_CREATE)
+  createTenant(@Body() body: CreateTenantDto, @Req() request: AdminRequest) {
+    return this.tenantsService.createTenant(body, request.dbUser);
   }
 
   @Get()
@@ -57,18 +59,39 @@ export class AdminTenantsController {
   }
 
   @Patch(':id')
+  @RequiresCapability(CAPABILITIES.TENANT_UPDATE)
   updateTenant(
     @Param('id') id: string,
     @Body() body: UpdateTenantDto,
     @Req() request: AdminRequest,
   ) {
-    return this.tenantsService.updateTenant(id, body, request.dbUser?.id);
+    return this.tenantsService.updateTenant(id, body, request.dbUser);
+  }
+
+  @Patch(':id/branding')
+  @RequiresCapability(CAPABILITIES.TENANT_UPDATE_BRANDING)
+  @Roles(
+    'verbilo_super_admin',
+    'verbilo_support',
+    'company_owner',
+    'company_admin',
+  )
+  updateBranding(
+    @Param('id') id: string,
+    @Body() body: UpdateTenantBrandingDto,
+    @Req() request: AdminRequest,
+  ) {
+    return this.tenantsService.updateBranding(id, body, request.dbUser);
   }
 
   @Delete(':id')
   @HttpCode(204)
   @Roles('verbilo_super_admin')
-  deleteTenant(@Param('id') id: string, @Req() request: AdminRequest): Promise<void> {
-    return this.tenantsService.deleteTenant(id, request.dbUser?.id);
+  @RequiresCapability(CAPABILITIES.TENANT_DELETE)
+  deleteTenant(
+    @Param('id') id: string,
+    @Req() request: AdminRequest,
+  ): Promise<void> {
+    return this.tenantsService.deleteTenant(id, request.dbUser);
   }
 }

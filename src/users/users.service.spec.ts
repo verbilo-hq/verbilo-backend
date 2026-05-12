@@ -1,5 +1,7 @@
 import { UsersService } from './users.service';
 import { PrismaService } from '../prisma/prisma.service';
+import { CAPABILITY_VALUES } from '../common/capabilities';
+import { type DbUserRequestContext } from '../common/request-context';
 
 describe('UsersService', () => {
   let service: UsersService;
@@ -50,8 +52,95 @@ describe('UsersService', () => {
     service = new UsersService(prisma);
   });
 
+  function dbUser(
+    role: DbUserRequestContext['role'],
+    overrides: Partial<DbUserRequestContext> = {},
+  ): DbUserRequestContext {
+    return {
+      id: 'user-1',
+      cognitoId: 'cognito-sub-1',
+      tenantId: 'tenant-1',
+      siteId: null,
+      siteIds: [],
+      role,
+      ...overrides,
+    };
+  }
+
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  describe('getMyPermissions', () => {
+    it('returns all capabilities and platform scope for verbilo_super_admin', async () => {
+      await expect(
+        service.getMyPermissions(
+          dbUser('verbilo_super_admin', { tenantId: null }),
+        ),
+      ).resolves.toEqual({
+        role: 'verbilo_super_admin',
+        capabilities: [...CAPABILITY_VALUES].sort(),
+        scope: { kind: 'platform' },
+        isPlatformAdmin: true,
+      });
+    });
+
+    it('returns tenant-scoped capabilities for company_admin', async () => {
+      await expect(
+        service.getMyPermissions(dbUser('company_admin')),
+      ).resolves.toEqual({
+        role: 'company_admin',
+        capabilities: [
+          'tenant.update',
+          'tenant.update_branding',
+          'users.assign_site',
+          'users.create',
+          'users.disable',
+          'users.list',
+          'users.reset_password',
+          'users.update_role',
+        ].sort(),
+        scope: { kind: 'tenant', tenantId: 'tenant-1' },
+        isPlatformAdmin: false,
+      });
+    });
+
+    it('returns sorted site-scoped permissions for area_manager assignments', async () => {
+      await expect(
+        service.getMyPermissions(
+          dbUser('area_manager', { siteIds: ['site-2', 'site-1'] }),
+        ),
+      ).resolves.toEqual({
+        role: 'area_manager',
+        capabilities: [
+          'users.assign_site',
+          'users.create',
+          'users.disable',
+          'users.list',
+          'users.reset_password',
+          'users.update_role',
+        ].sort(),
+        scope: {
+          kind: 'sites',
+          tenantId: 'tenant-1',
+          siteIds: ['site-1', 'site-2'],
+        },
+        isPlatformAdmin: false,
+      });
+    });
+
+    it('returns empty capabilities and no scope for employee with no assignments', async () => {
+      await expect(
+        service.getMyPermissions(
+          dbUser('employee', { siteId: null, siteIds: [] }),
+        ),
+      ).resolves.toEqual({
+        role: 'employee',
+        capabilities: [],
+        scope: { kind: 'none' },
+        isPlatformAdmin: false,
+      });
+    });
   });
 
   it('export returns expected shape with non-null user / tenant / site', async () => {

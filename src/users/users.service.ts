@@ -1,6 +1,22 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { StaffMember } from '@prisma/client';
+import { capabilitiesFor, type Capability } from '../common/capabilities';
+import { type DbUserRequestContext } from '../common/request-context';
+import { resolveActorScope, type ActorScope } from '../common/scope';
 import { PrismaService } from '../prisma/prisma.service';
+
+export type SerializableActorScope =
+  | { kind: 'platform' }
+  | { kind: 'tenant'; tenantId: string }
+  | { kind: 'sites'; tenantId: string; siteIds: string[] }
+  | { kind: 'none' };
+
+export type MePermissionsResponse = {
+  role: string;
+  capabilities: Capability[];
+  scope: SerializableActorScope;
+  isPlatformAdmin: boolean;
+};
 
 export type UserMeExport = {
   exportedAt: string;
@@ -37,6 +53,22 @@ export type UserMeExport = {
 @Injectable()
 export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async getMyPermissions(
+    dbUser: DbUserRequestContext,
+  ): Promise<MePermissionsResponse> {
+    const role = dbUser.role;
+    const capabilities = [...capabilitiesFor(role)].sort();
+    const scope = serialiseScope(resolveActorScope(dbUser));
+
+    return {
+      role,
+      capabilities,
+      scope,
+      isPlatformAdmin:
+        role === 'verbilo_super_admin' || role === 'verbilo_support',
+    };
+  }
 
   async getMe(cognitoId: string, tenantId?: string) {
     const user = await this.prisma.user.findFirst({
@@ -170,4 +202,20 @@ export class UsersService {
       });
     });
   }
+}
+
+function serialiseScope(scope: ActorScope | null): SerializableActorScope {
+  if (!scope) {
+    return { kind: 'none' };
+  }
+
+  if (scope.kind !== 'sites') {
+    return scope;
+  }
+
+  return {
+    kind: 'sites',
+    tenantId: scope.tenantId,
+    siteIds: [...scope.siteIds].sort(),
+  };
 }

@@ -1,12 +1,16 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
+import { CAPABILITIES, type Capability } from '../common/capabilities';
+import { type DbUserRequestContext } from '../common/request-context';
+import { canActOnTarget, resolveActorScope } from '../common/scope';
 import {
   isReservedSubdomain,
   isValidSlug,
@@ -17,6 +21,14 @@ import { VercelDomainsClient } from '../integrations/vercel/vercel-domains.clien
 import { PrismaService } from '../prisma/prisma.service';
 
 const ENABLED_MODULE_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
+const BRANDING_FIELDS = [
+  'logoUrl',
+  'primaryColor',
+  'secondaryColor',
+  'accentColor',
+] as const;
+
+type TenantBrandingField = (typeof BRANDING_FIELDS)[number];
 
 type SlugAvailability =
   | { available: true }
@@ -37,6 +49,10 @@ export type UpdateTenantInput = {
   settings?: unknown;
 };
 
+export type UpdateTenantBrandingInput = Partial<
+  Record<TenantBrandingField, string | null>
+>;
+
 @Injectable()
 export class TenantsService {
   private readonly logger = new Logger(TenantsService.name);
@@ -48,7 +64,7 @@ export class TenantsService {
     private readonly route53Domains: Route53DomainsClient,
   ) {}
 
-  async createTenant(input: CreateTenantInput, actorUserId?: string) {
+  async createTenant(input: CreateTenantInput, actor?: DbUserRequestContext) {
     const name = this.readRequiredString(input.name, 'name');
     const slug = await this.validateNewSlug(input.slug);
     // Defaults to 'healthcare' (sector-agnostic) when none is provided — see
@@ -69,7 +85,7 @@ export class TenantsService {
       });
 
       await this.audit.record({
-        actorUserId,
+        actorUserId: actor?.id,
         tenantId: tenant.id,
         action: 'tenant.created',
         entityType: 'tenant',
@@ -79,7 +95,10 @@ export class TenantsService {
           slug: tenant.slug,
           sector: tenant.sector,
           enabledModules: tenant.enabledModules,
-        },
+          ...this.authorizationAuditPayload(actor, CAPABILITIES.TENANT_CREATE, {
+            tenantId: tenant.id,
+          }),
+        } as Prisma.InputJsonValue,
       });
 
       try {
@@ -89,7 +108,7 @@ export class TenantsService {
         );
 
         await this.audit.record({
-          actorUserId,
+          actorUserId: actor?.id,
           tenantId: tenant.id,
           action: 'tenant.domain.provisioned',
           entityType: 'tenant',
@@ -107,7 +126,7 @@ export class TenantsService {
         );
 
         await this.audit.record({
-          actorUserId,
+          actorUserId: actor?.id,
           tenantId: tenant.id,
           action: 'tenant.domain.provision_failed',
           entityType: 'tenant',
@@ -123,7 +142,7 @@ export class TenantsService {
         const result = await this.route53Domains.createTenantCname(tenant.slug);
 
         await this.audit.record({
-          actorUserId,
+          actorUserId: actor?.id,
           tenantId: tenant.id,
           action: 'tenant.dns.created',
           entityType: 'tenant',
@@ -141,7 +160,7 @@ export class TenantsService {
         );
 
         await this.audit.record({
-          actorUserId,
+          actorUserId: actor?.id,
           tenantId: tenant.id,
           action: 'tenant.dns.create_failed',
           entityType: 'tenant',
@@ -209,7 +228,7 @@ export class TenantsService {
   async updateTenant(
     id: string,
     input: UpdateTenantInput,
-    actorUserId?: string,
+    actor?: DbUserRequestContext,
   ) {
     if (input.slug !== undefined) {
       throw new BadRequestException('Tenant slug cannot be changed here');
@@ -285,18 +304,103 @@ export class TenantsService {
     });
 
     await this.audit.record({
-      actorUserId,
+      actorUserId: actor?.id,
       tenantId: updatedTenant.id,
       action: 'tenant.settings.updated',
       entityType: 'tenant',
       entityId: updatedTenant.id,
-      payload: { diff } as Prisma.InputJsonValue,
+      payload: {
+        diff,
+        ...this.authorizationAuditPayload(actor, CAPABILITIES.TENANT_UPDATE, {
+          tenantId: updatedTenant.id,
+        }),
+      } as Prisma.InputJsonValue,
     });
 
     return this.withTenantUrl(updatedTenant);
   }
 
-  async deleteTenant(id: string, actorUserId?: string): Promise<void> {
+  /**
+   * Applies tenant branding changes.
+   *
+   * Undefined fields are unchanged. Null clears that branding field. Empty or
+   * whitespace-only strings are treated as "leave unchanged" so frontend forms
+   * can submit blank inputs without clearing existing branding accidentally.
+   */
+  async updateBranding(
+    id: string,
+    branding: UpdateTenantBrandingInput,
+    actor?: DbUserRequestContext,
+  ) {
+    const existingTenant = await this.prisma.tenant.findUnique({
+      where: { id },
+    });
+
+    if (!existingTenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    this.assertActorCanActOnTenant(actor, id);
+
+    const data: Prisma.TenantUpdateInput = {};
+    const diff: Record<
+      TenantBrandingField,
+      { from: string | null; to: string | null }
+    > = {} as Record<
+      TenantBrandingField,
+      { from: string | null; to: string | null }
+    >;
+
+    for (const field of BRANDING_FIELDS) {
+      const value = branding[field];
+
+      if (value === undefined) {
+        continue;
+      }
+
+      const nextValue = value === null ? null : value.trim();
+
+      if (nextValue === '') {
+        continue;
+      }
+
+      if (nextValue !== existingTenant[field]) {
+        data[field] = nextValue;
+        diff[field] = { from: existingTenant[field], to: nextValue };
+      }
+    }
+
+    if (!Object.keys(diff).length) {
+      throw new BadRequestException('No tenant branding changes provided');
+    }
+
+    const updatedTenant = await this.prisma.tenant.update({
+      where: { id },
+      data,
+    });
+
+    await this.audit.record({
+      actorUserId: actor?.id,
+      tenantId: updatedTenant.id,
+      action: 'tenant.branding.updated',
+      entityType: 'tenant',
+      entityId: updatedTenant.id,
+      payload: {
+        diff,
+        ...this.authorizationAuditPayload(
+          actor,
+          CAPABILITIES.TENANT_UPDATE_BRANDING,
+          {
+            tenantId: updatedTenant.id,
+          },
+        ),
+      } as Prisma.InputJsonValue,
+    });
+
+    return this.withTenantUrl(updatedTenant);
+  }
+
+  async deleteTenant(id: string, actor?: DbUserRequestContext): Promise<void> {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id },
     });
@@ -317,12 +421,21 @@ export class TenantsService {
     await this.prisma.$transaction(async (tx) => {
       await tx.auditLog.create({
         data: {
-          actorUserId,
+          actorUserId: actor?.id,
           tenantId: tenant.id,
           action: 'tenant.deleted',
           entityType: 'tenant',
           entityId: tenant.id,
-          payloadJson: { snapshot } as Prisma.InputJsonValue,
+          payloadJson: {
+            snapshot,
+            ...this.authorizationAuditPayload(
+              actor,
+              CAPABILITIES.TENANT_DELETE,
+              {
+                tenantId: tenant.id,
+              },
+            ),
+          } as Prisma.InputJsonValue,
         },
       });
 
@@ -333,7 +446,7 @@ export class TenantsService {
       const result = await this.route53Domains.removeTenantCname(tenant.slug);
 
       await this.audit.record({
-        actorUserId,
+        actorUserId: actor?.id,
         action: 'tenant.dns.removed',
         entityType: 'tenant',
         entityId: tenant.id,
@@ -350,7 +463,7 @@ export class TenantsService {
       );
 
       await this.audit.record({
-        actorUserId,
+        actorUserId: actor?.id,
         action: 'tenant.dns.remove_failed',
         entityType: 'tenant',
         entityId: tenant.id,
@@ -366,7 +479,7 @@ export class TenantsService {
       const result = await this.vercelDomains.removeTenantDomain(tenant.slug);
 
       await this.audit.record({
-        actorUserId,
+        actorUserId: actor?.id,
         action: 'tenant.domain.removed',
         entityType: 'tenant',
         entityId: tenant.id,
@@ -382,7 +495,7 @@ export class TenantsService {
       );
 
       await this.audit.record({
-        actorUserId,
+        actorUserId: actor?.id,
         action: 'tenant.domain.remove_failed',
         entityType: 'tenant',
         entityId: tenant.id,
@@ -406,6 +519,10 @@ export class TenantsService {
         name: true,
         sector: true,
         enabledModules: true,
+        logoUrl: true,
+        primaryColor: true,
+        secondaryColor: true,
+        accentColor: true,
       },
     });
 
@@ -414,6 +531,37 @@ export class TenantsService {
     }
 
     return tenant;
+  }
+
+  private assertActorCanActOnTenant(
+    actor: DbUserRequestContext | undefined,
+    tenantId: string,
+  ) {
+    if (!actor) {
+      throw new ForbiddenException('Actor unresolved');
+    }
+
+    const actorScope = resolveActorScope(actor);
+    if (!actorScope) {
+      throw new ForbiddenException('Actor scope unresolved');
+    }
+
+    if (!canActOnTarget(actorScope, { tenantId })) {
+      throw new ForbiddenException('Actor scope cannot target tenant');
+    }
+  }
+
+  private authorizationAuditPayload(
+    actor: DbUserRequestContext | undefined,
+    capability: Capability,
+    targetSnapshot: Record<string, unknown>,
+  ) {
+    return {
+      ...(actor ? { actorRole: actor.role } : {}),
+      actorScope: actor ? resolveActorScope(actor) : null,
+      capability,
+      targetSnapshot,
+    };
   }
 
   private async validateNewSlug(rawSlug: unknown): Promise<string> {

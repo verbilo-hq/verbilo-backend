@@ -1,15 +1,26 @@
-import { CanActivate, ExecutionContext, Injectable } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  ForbiddenException,
+  Injectable,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { Request } from 'express';
 import { CognitoJwtPayload } from '../auth/jwt.strategy';
 import { PrismaService } from '../prisma/prisma.service';
-import { DbUserRequestContext } from './request-context';
+import {
+  ActingInTenantContext,
+  DbUserRequestContext,
+  TenantRequestContext,
+} from './request-context';
 import { ROLES_KEY } from './roles.decorator';
-import { isUserRole, UserRole } from './user-roles';
+import { isUserRole, PLATFORM_ROLES, UserRole } from './user-roles';
 
 type RoleGuardRequest = Request & {
   user?: CognitoJwtPayload;
   dbUser?: DbUserRequestContext;
+  tenant?: TenantRequestContext;
+  actingInTenant?: ActingInTenantContext;
 };
 
 @Injectable()
@@ -25,15 +36,11 @@ export class RolesGuard implements CanActivate {
       [context.getHandler(), context.getClass()],
     );
 
-    if (!requiredRoles?.length) {
-      return true;
-    }
-
     const request = context.switchToHttp().getRequest<RoleGuardRequest>();
     const cognitoId = request.user?.sub;
 
     if (!cognitoId) {
-      return false;
+      return !requiredRoles?.length;
     }
 
     const dbUser = request.dbUser ?? (await this.findDbUser(cognitoId));
@@ -43,8 +50,32 @@ export class RolesGuard implements CanActivate {
     }
 
     request.dbUser = dbUser;
+    this.enforceTenantScope(request, dbUser);
+
+    if (!requiredRoles?.length) {
+      return true;
+    }
 
     return requiredRoles.includes(dbUser.role);
+  }
+
+  private enforceTenantScope(
+    request: RoleGuardRequest,
+    dbUser: DbUserRequestContext,
+  ) {
+    const tenant = request.tenant;
+
+    if (!tenant?.id || tenant.id === dbUser.tenantId) {
+      return;
+    }
+
+    if (!PLATFORM_ROLES.has(dbUser.role)) {
+      throw new ForbiddenException(
+        'cannot scope request to a different tenant',
+      );
+    }
+
+    request.actingInTenant = tenant;
   }
 
   private async findDbUser(
@@ -58,6 +89,7 @@ export class RolesGuard implements CanActivate {
         tenantId: true,
         siteId: true,
         role: true,
+        siteAssignments: { select: { siteId: true } },
       },
     });
 
@@ -66,9 +98,12 @@ export class RolesGuard implements CanActivate {
     }
 
     return {
-      ...dbUser,
+      id: dbUser.id,
       cognitoId: dbUser.cognitoId,
+      tenantId: dbUser.tenantId,
+      siteId: dbUser.siteId,
       role: dbUser.role,
+      siteIds: dbUser.siteAssignments.map((assignment) => assignment.siteId),
     };
   }
 }

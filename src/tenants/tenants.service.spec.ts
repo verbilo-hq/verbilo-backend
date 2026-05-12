@@ -1,9 +1,12 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
+import { CAPABILITIES } from '../common/capabilities';
+import { type DbUserRequestContext } from '../common/request-context';
 import type { Route53DomainsClient } from '../integrations/aws/route53.client';
 import { VercelDomainsClient } from '../integrations/vercel/vercel-domains.client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,6 +20,7 @@ describe('TenantsService', () => {
   let service: TenantsService;
   let tenantFindUnique: jest.Mock;
   let tenantCreate: jest.Mock;
+  let tenantUpdate: jest.Mock;
   let tenantDelete: jest.Mock;
   let auditLogCreate: jest.Mock;
   let transaction: jest.Mock;
@@ -27,10 +31,19 @@ describe('TenantsService', () => {
   let createTenantCname: jest.Mock;
   let removeTenantCname: jest.Mock;
   let route53HostnameForSlug: jest.Mock;
+  const actor: DbUserRequestContext = {
+    id: 'actor-user-id',
+    cognitoId: 'actor-cognito-id',
+    tenantId: null,
+    siteId: null,
+    siteIds: [],
+    role: 'verbilo_super_admin',
+  };
 
   beforeEach(() => {
     tenantFindUnique = jest.fn();
     tenantCreate = jest.fn();
+    tenantUpdate = jest.fn();
     tenantDelete = jest.fn();
     auditLogCreate = jest.fn().mockResolvedValue(undefined);
     transaction = jest.fn(async (callback: any) =>
@@ -65,6 +78,7 @@ describe('TenantsService', () => {
       tenant: {
         findUnique: tenantFindUnique,
         create: tenantCreate,
+        update: tenantUpdate,
       },
       $transaction: transaction,
     } as unknown as PrismaService;
@@ -176,7 +190,7 @@ describe('TenantsService', () => {
           sector: 'dental',
           enabledModules: ['documents'],
         },
-        'actor-user-id',
+        actor,
       ),
     ).resolves.toEqual({
       ...tenant,
@@ -202,6 +216,10 @@ describe('TenantsService', () => {
         slug: 'acme-dental',
         sector: 'dental',
         enabledModules: ['documents'],
+        actorRole: 'verbilo_super_admin',
+        actorScope: { kind: 'platform' },
+        capability: CAPABILITIES.TENANT_CREATE,
+        targetSnapshot: { tenantId: 'tenant-id' },
       },
     });
     expect(provisionTenantDomain).toHaveBeenCalledWith('acme-dental', 'main');
@@ -276,7 +294,7 @@ describe('TenantsService', () => {
           slug: 'acme-dental',
           sector: 'dental',
         },
-        'actor-user-id',
+        actor,
       ),
     ).resolves.toMatchObject({
       id: 'tenant-id',
@@ -333,7 +351,7 @@ describe('TenantsService', () => {
           slug: 'acme-dental',
           sector: 'dental',
         },
-        'actor-user-id',
+        actor,
       ),
     ).resolves.toMatchObject({
       id: 'tenant-id',
@@ -390,6 +408,260 @@ describe('TenantsService', () => {
     });
   });
 
+  it('updates tenants and writes authorization context in the audit payload', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const existingTenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      archivedAt: null,
+      createdAt,
+    };
+    const updatedTenant = {
+      ...existingTenant,
+      name: 'Acme Health',
+      enabledModules: ['documents', 'staff'],
+    };
+
+    tenantFindUnique.mockResolvedValue(existingTenant);
+    tenantUpdate.mockResolvedValue(updatedTenant);
+
+    await expect(
+      service.updateTenant(
+        'tenant-id',
+        {
+          name: 'Acme Health',
+          enabledModules: ['documents', 'staff'],
+        },
+        actor,
+      ),
+    ).resolves.toEqual({
+      ...updatedTenant,
+      url: 'https://acme-dental.verbilo.co.uk',
+    });
+
+    expect(tenantUpdate).toHaveBeenCalledWith({
+      where: { id: 'tenant-id' },
+      data: {
+        name: 'Acme Health',
+        enabledModules: ['documents', 'staff'],
+      },
+    });
+    expect(auditRecord).toHaveBeenCalledWith({
+      actorUserId: 'actor-user-id',
+      tenantId: 'tenant-id',
+      action: 'tenant.settings.updated',
+      entityType: 'tenant',
+      entityId: 'tenant-id',
+      payload: {
+        diff: {
+          name: { from: 'Acme Dental', to: 'Acme Health' },
+          enabledModules: {
+            from: ['documents'],
+            to: ['documents', 'staff'],
+          },
+        },
+        actorRole: 'verbilo_super_admin',
+        actorScope: { kind: 'platform' },
+        capability: CAPABILITIES.TENANT_UPDATE,
+        targetSnapshot: { tenantId: 'tenant-id' },
+      },
+    });
+  });
+
+  it('updates tenant branding, skips empty strings, and writes the diff with authorization context', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const companyAdmin: DbUserRequestContext = {
+      id: 'company-admin-id',
+      cognitoId: 'company-admin-cognito-id',
+      tenantId: 'tenant-id',
+      siteId: null,
+      siteIds: [],
+      role: 'company_admin',
+    };
+    const existingTenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      logoUrl: 'https://cdn.example.com/old-logo.png',
+      primaryColor: '#123456',
+      secondaryColor: '#abcdef',
+      accentColor: '#fedcba',
+      archivedAt: null,
+      createdAt,
+    };
+    const updatedTenant = {
+      ...existingTenant,
+      logoUrl: 'https://cdn.example.com/new-logo.png',
+      primaryColor: '#FFFFFF',
+      accentColor: null,
+    };
+
+    tenantFindUnique.mockResolvedValue(existingTenant);
+    tenantUpdate.mockResolvedValue(updatedTenant);
+
+    await expect(
+      service.updateBranding(
+        'tenant-id',
+        {
+          logoUrl: ' https://cdn.example.com/new-logo.png ',
+          primaryColor: '#FFFFFF',
+          secondaryColor: '',
+          accentColor: null,
+        },
+        companyAdmin,
+      ),
+    ).resolves.toEqual({
+      ...updatedTenant,
+      url: 'https://acme-dental.verbilo.co.uk',
+    });
+
+    expect(tenantUpdate).toHaveBeenCalledWith({
+      where: { id: 'tenant-id' },
+      data: {
+        logoUrl: 'https://cdn.example.com/new-logo.png',
+        primaryColor: '#FFFFFF',
+        accentColor: null,
+      },
+    });
+    expect(auditRecord).toHaveBeenCalledWith({
+      actorUserId: 'company-admin-id',
+      tenantId: 'tenant-id',
+      action: 'tenant.branding.updated',
+      entityType: 'tenant',
+      entityId: 'tenant-id',
+      payload: {
+        diff: {
+          logoUrl: {
+            from: 'https://cdn.example.com/old-logo.png',
+            to: 'https://cdn.example.com/new-logo.png',
+          },
+          primaryColor: { from: '#123456', to: '#FFFFFF' },
+          accentColor: { from: '#fedcba', to: null },
+        },
+        actorRole: 'company_admin',
+        actorScope: { kind: 'tenant', tenantId: 'tenant-id' },
+        capability: CAPABILITIES.TENANT_UPDATE_BRANDING,
+        targetSnapshot: { tenantId: 'tenant-id' },
+      },
+    });
+  });
+
+  it('rejects tenant branding updates outside the actor tenant scope', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const companyAdmin: DbUserRequestContext = {
+      id: 'company-admin-id',
+      cognitoId: 'company-admin-cognito-id',
+      tenantId: 'tenant-a-id',
+      siteId: null,
+      siteIds: [],
+      role: 'company_admin',
+    };
+    const existingTenant = {
+      id: 'tenant-b-id',
+      name: 'Riverside Vets',
+      slug: 'riverside-vets',
+      sector: 'vets',
+      enabledModules: [],
+      settings: {},
+      logoUrl: null,
+      primaryColor: null,
+      secondaryColor: null,
+      accentColor: null,
+      archivedAt: null,
+      createdAt,
+    };
+
+    tenantFindUnique.mockResolvedValue(existingTenant);
+
+    await expect(
+      service.updateBranding(
+        'tenant-b-id',
+        { primaryColor: '#123456' },
+        companyAdmin,
+      ),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(tenantUpdate).not.toHaveBeenCalled();
+    expect(auditRecord).not.toHaveBeenCalled();
+  });
+
+  it('rejects tenant branding updates with no real changes', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const existingTenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      logoUrl: 'https://cdn.example.com/logo.png',
+      primaryColor: '#123456',
+      secondaryColor: null,
+      accentColor: null,
+      archivedAt: null,
+      createdAt,
+    };
+
+    tenantFindUnique.mockResolvedValue(existingTenant);
+
+    await expect(
+      service.updateBranding(
+        'tenant-id',
+        {
+          logoUrl: 'https://cdn.example.com/logo.png',
+          primaryColor: '#123456',
+          secondaryColor: '',
+        },
+        actor,
+      ),
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(tenantUpdate).not.toHaveBeenCalled();
+    expect(auditRecord).not.toHaveBeenCalled();
+  });
+
+  it('selects branding fields for the public tenant lookup', async () => {
+    const tenant = {
+      id: 'tenant-id',
+      slug: 'acme-dental',
+      name: 'Acme Dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      logoUrl: 'https://cdn.example.com/logo.png',
+      primaryColor: '#123456',
+      secondaryColor: '#abcdef',
+      accentColor: '#fedcba',
+    };
+
+    tenantFindUnique.mockResolvedValue(tenant);
+
+    await expect(service.getPublicTenantBySlug('acme-dental')).resolves.toEqual(
+      tenant,
+    );
+
+    expect(tenantFindUnique).toHaveBeenCalledWith({
+      where: { slug: 'acme-dental' },
+      select: {
+        id: true,
+        slug: true,
+        name: true,
+        sector: true,
+        enabledModules: true,
+        logoUrl: true,
+        primaryColor: true,
+        secondaryColor: true,
+        accentColor: true,
+      },
+    });
+  });
+
   it('deletes tenants, removes the Vercel domain, and writes audit rows', async () => {
     const createdAt = new Date('2026-05-10T10:00:00.000Z');
     const tenant = {
@@ -415,7 +687,7 @@ describe('TenantsService', () => {
     });
 
     await expect(
-      service.deleteTenant('tenant-id', 'actor-user-id'),
+      service.deleteTenant('tenant-id', actor),
     ).resolves.toBeUndefined();
 
     expect(tenantFindUnique).toHaveBeenCalledWith({
@@ -438,6 +710,10 @@ describe('TenantsService', () => {
             enabledModules: ['documents'],
             createdAt,
           },
+          actorRole: 'verbilo_super_admin',
+          actorScope: { kind: 'platform' },
+          capability: CAPABILITIES.TENANT_DELETE,
+          targetSnapshot: { tenantId: 'tenant-id' },
         },
       },
     });
@@ -479,7 +755,7 @@ describe('TenantsService', () => {
     tenantFindUnique.mockResolvedValue(null);
 
     await expect(
-      service.deleteTenant('missing-tenant-id', 'actor-user-id'),
+      service.deleteTenant('missing-tenant-id', actor),
     ).rejects.toBeInstanceOf(NotFoundException);
 
     expect(transaction).not.toHaveBeenCalled();
@@ -507,7 +783,7 @@ describe('TenantsService', () => {
     removeTenantDomain.mockRejectedValue(new Error('boom'));
 
     await expect(
-      service.deleteTenant('tenant-id', 'actor-user-id'),
+      service.deleteTenant('tenant-id', actor),
     ).resolves.toBeUndefined();
 
     expect(removeTenantCname).toHaveBeenCalledWith('acme-dental');
@@ -541,7 +817,7 @@ describe('TenantsService', () => {
     removeTenantCname.mockRejectedValue(new Error('r53 boom'));
 
     await expect(
-      service.deleteTenant('tenant-id', 'actor-user-id'),
+      service.deleteTenant('tenant-id', actor),
     ).resolves.toBeUndefined();
 
     expect(auditRecord).toHaveBeenCalledWith(

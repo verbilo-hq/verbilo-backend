@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -12,7 +13,10 @@ import {
 import { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CognitoJwtPayload } from '../auth/jwt.strategy';
+import { CapabilityGuard } from '../common/capability.guard';
+import { CAPABILITIES } from '../common/capabilities';
 import { DbUserRequestContext } from '../common/request-context';
+import { RequiresCapability } from '../common/requires-capability.decorator';
 import { Roles } from '../common/roles.decorator';
 import { RolesGuard } from '../common/roles.guard';
 import { AdminUsersService } from './admin-users.service';
@@ -24,18 +28,20 @@ type AdminRequest = Request & {
 };
 
 @Controller('admin/tenants/:id/users')
-@UseGuards(JwtAuthGuard, RolesGuard)
+@UseGuards(JwtAuthGuard, RolesGuard, CapabilityGuard)
 @Roles('verbilo_super_admin', 'verbilo_support')
 export class AdminUsersController {
   constructor(private readonly adminUsers: AdminUsersService) {}
 
   @Get()
+  @RequiresCapability(CAPABILITIES.USERS_LIST)
   listUsers(@Param('id') tenantId: string) {
     return this.adminUsers.listUsers(tenantId);
   }
 
   @Patch(':userId')
   @Roles('verbilo_super_admin')
+  @RequiresCapability(CAPABILITIES.USERS_UPDATE_ROLE)
   updateUserRole(
     @Param('id') tenantId: string,
     @Param('userId') userId: string,
@@ -46,30 +52,79 @@ export class AdminUsersController {
       tenantId,
       userId,
       body.role,
-      request.dbUser?.id,
+      request.dbUser,
     );
   }
 
   @Post(':userId/disable')
   @HttpCode(204)
   @Roles('verbilo_super_admin')
+  @RequiresCapability(CAPABILITIES.USERS_DISABLE)
   disableUser(
     @Param('id') tenantId: string,
     @Param('userId') userId: string,
     @Req() request: AdminRequest,
   ): Promise<void> {
-    return this.adminUsers.disableUser(tenantId, userId, request.dbUser?.id);
+    return this.adminUsers.disableUser(tenantId, userId, request.dbUser);
   }
 
   @Post(':userId/enable')
   @HttpCode(204)
   @Roles('verbilo_super_admin')
+  @RequiresCapability(CAPABILITIES.USERS_DISABLE)
   enableUser(
     @Param('id') tenantId: string,
     @Param('userId') userId: string,
     @Req() request: AdminRequest,
   ): Promise<void> {
-    return this.adminUsers.enableUser(tenantId, userId, request.dbUser?.id);
+    return this.adminUsers.enableUser(tenantId, userId, request.dbUser);
+  }
+
+  @Post(':userId/sites/:siteId')
+  @HttpCode(204)
+  @Roles(
+    'verbilo_super_admin',
+    'verbilo_support',
+    'company_owner',
+    'company_admin',
+    'area_manager',
+  )
+  @RequiresCapability(CAPABILITIES.USERS_ASSIGN_SITE)
+  assignUserSite(
+    @Param('id') tenantId: string,
+    @Param('userId') userId: string,
+    @Param('siteId') siteId: string,
+    @Req() request: AdminRequest,
+  ): Promise<void> {
+    return this.adminUsers.assignUserSite(
+      tenantId,
+      userId,
+      siteId,
+      request.dbUser,
+    );
+  }
+
+  @Delete(':userId/sites/:siteId')
+  @HttpCode(204)
+  @Roles(
+    'verbilo_super_admin',
+    'verbilo_support',
+    'company_owner',
+    'company_admin',
+    'area_manager',
+  )
+  @RequiresCapability(CAPABILITIES.USERS_ASSIGN_SITE)
+  unassignUserSite(
+    @Param('id') tenantId: string,
+    @Param('userId') userId: string,
+    @Param('siteId') siteId: string,
+    @Req() request: AdminRequest,
+  ): Promise<void> {
+    return this.adminUsers.unassignUserSite(
+      tenantId,
+      userId,
+      siteId,
+      request.dbUser,
+    );
   }
 }
-
