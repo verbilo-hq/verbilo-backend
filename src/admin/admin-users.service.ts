@@ -36,6 +36,11 @@ type UserWithSite = {
   site: { id: string; name: string } | null;
 };
 
+type JsonActorScope =
+  | { kind: 'platform' }
+  | { kind: 'tenant'; tenantId: string }
+  | { kind: 'sites'; tenantId: string; siteIds: string[] };
+
 @Injectable()
 export class AdminUsersService {
   constructor(
@@ -199,6 +204,108 @@ export class AdminUsersService {
     });
   }
 
+  async assignUserSite(
+    tenantId: string,
+    userId: string,
+    siteId: string,
+    actor?: DbUserRequestContext,
+  ): Promise<void> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const site = await this.prisma.site.findFirst({
+      where: { id: siteId, tenantId },
+      select: { id: true },
+    });
+
+    if (!site) {
+      throw new NotFoundException('Site not found');
+    }
+
+    this.assertActorCanActOnSite(actor, tenantId, siteId);
+
+    await this.prisma.userSiteAssignment.upsert({
+      where: { userId_siteId: { userId, siteId } },
+      create: { userId, siteId },
+      update: {},
+    });
+
+    await this.audit.record({
+      actorUserId: actor?.id,
+      tenantId,
+      action: 'user.site.assigned',
+      entityType: 'user',
+      entityId: userId,
+      payload: this.authorizationAuditPayload(
+        actor,
+        CAPABILITIES.USERS_ASSIGN_SITE,
+        {
+          tenantId,
+          userId,
+          siteId,
+        },
+      ) as Prisma.InputJsonValue,
+    });
+  }
+
+  async unassignUserSite(
+    tenantId: string,
+    userId: string,
+    siteId: string,
+    actor?: DbUserRequestContext,
+  ): Promise<void> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      select: { id: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    const site = await this.prisma.site.findFirst({
+      where: { id: siteId, tenantId },
+      select: { id: true },
+    });
+
+    if (!site) {
+      throw new NotFoundException('Site not found');
+    }
+
+    this.assertActorCanActOnSite(actor, tenantId, siteId);
+
+    const result = await this.prisma.userSiteAssignment.deleteMany({
+      where: { userId, siteId },
+    });
+
+    if (result.count === 0) {
+      return;
+    }
+
+    await this.audit.record({
+      actorUserId: actor?.id,
+      tenantId,
+      action: 'user.site.unassigned',
+      entityType: 'user',
+      entityId: userId,
+      payload: this.authorizationAuditPayload(
+        actor,
+        CAPABILITIES.USERS_ASSIGN_SITE,
+        {
+          tenantId,
+          userId,
+          siteId,
+        },
+      ) as Prisma.InputJsonValue,
+    });
+  }
+
   private toSummary(user: UserWithSite): AdminUserSummary {
     return {
       id: user.id,
@@ -238,6 +345,25 @@ export class AdminUsersService {
     }
   }
 
+  private assertActorCanActOnSite(
+    actor: DbUserRequestContext | undefined,
+    tenantId: string,
+    siteId: string,
+  ) {
+    if (!actor) {
+      throw new ForbiddenException('Actor unresolved');
+    }
+
+    const actorScope = resolveActorScope(actor);
+    if (!actorScope) {
+      throw new ForbiddenException('Actor scope unresolved');
+    }
+
+    if (!canActOnTarget(actorScope, { tenantId, siteId })) {
+      throw new ForbiddenException('Actor scope cannot target site');
+    }
+  }
+
   private assertActorCanTargetRole(
     actor: DbUserRequestContext | undefined,
     role: UserRole,
@@ -260,9 +386,25 @@ export class AdminUsersService {
   ) {
     return {
       ...(actor ? { actorRole: actor.role } : {}),
-      actorScope: actor ? resolveActorScope(actor) : null,
+      actorScope: actor ? this.toJsonActorScope(resolveActorScope(actor)) : null,
       capability,
       targetSnapshot,
+    };
+  }
+
+  private toJsonActorScope(
+    actorScope: ReturnType<typeof resolveActorScope>,
+  ): JsonActorScope | null {
+    if (!actorScope) {
+      return null;
+    }
+    if (actorScope.kind !== 'sites') {
+      return actorScope;
+    }
+    return {
+      kind: 'sites',
+      tenantId: actorScope.tenantId,
+      siteIds: [...actorScope.siteIds],
     };
   }
 }

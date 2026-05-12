@@ -8,7 +8,7 @@ import { type UserRole } from './user-roles';
 export type ActorScope =
   | { kind: 'platform' }
   | { kind: 'tenant'; tenantId: string }
-  | { kind: 'site'; tenantId: string; siteId: string };
+  | { kind: 'sites'; tenantId: string; siteIds: ReadonlySet<string> };
 
 const PLATFORM_ROLES: ReadonlySet<UserRole> = new Set([
   'verbilo_super_admin',
@@ -20,10 +20,7 @@ const TENANT_WIDE_ROLES: ReadonlySet<UserRole> = new Set([
 ]);
 
 /**
- * Build the actor scope from a hydrated dbUser. Phase 1 treats
- * `area_manager` and `practice_manager` both as { kind: 'site' } scoped
- * to their single `User.siteId`; Phase 2 (VER-58) adds proper multi-
- * site assignment.
+ * Build the actor scope from a hydrated dbUser.
  */
 export function resolveActorScope(
   dbUser: DbUserRequestContext,
@@ -37,8 +34,21 @@ export function resolveActorScope(
   if (TENANT_WIDE_ROLES.has(dbUser.role as UserRole)) {
     return { kind: 'tenant', tenantId: dbUser.tenantId };
   }
-  if (!dbUser.siteId) return null;
-  return { kind: 'site', tenantId: dbUser.tenantId, siteId: dbUser.siteId };
+  if (dbUser.siteIds.length > 0) {
+    return {
+      kind: 'sites',
+      tenantId: dbUser.tenantId,
+      siteIds: new Set(dbUser.siteIds),
+    };
+  }
+  if (dbUser.siteId) {
+    return {
+      kind: 'sites',
+      tenantId: dbUser.tenantId,
+      siteIds: new Set([dbUser.siteId]),
+    };
+  }
+  return null;
 }
 
 /**
@@ -55,10 +65,10 @@ export type ActionTarget = {
  *
  * - platform: any tenant/site
  * - tenant:   target.tenantId must match
- * - site:     target.tenantId must match AND target.siteId (if set)
- *             must equal actor.siteId. If target has no siteId, a
- *             site-scoped actor is NOT permitted (tenant-wide ops
- *             require tenant or platform scope).
+ * - sites:    target.tenantId must match AND target.siteId must be in
+ *             actor.siteIds. If target has no siteId, a site-scoped
+ *             actor is NOT permitted (tenant-wide ops require tenant
+ *             or platform scope).
  */
 export function canActOnTarget(
   actor: ActorScope,
@@ -68,5 +78,5 @@ export function canActOnTarget(
   if (actor.tenantId !== target.tenantId) return false;
   if (actor.kind === 'tenant') return true;
   if (!target.siteId) return false;
-  return actor.siteId === target.siteId;
+  return actor.siteIds.has(target.siteId);
 }

@@ -65,6 +65,7 @@ describe('RolesGuard', () => {
         tenantId: true,
         siteId: true,
         role: true,
+        siteAssignments: { select: { siteId: true } },
       },
     });
   });
@@ -77,6 +78,7 @@ describe('RolesGuard', () => {
       tenantId: null,
       siteId: null,
       role: 'verbilo_support',
+      siteAssignments: [],
     });
 
     await expect(
@@ -84,4 +86,3 @@ describe('RolesGuard', () => {
     ).resolves.toBe(true);
   });
 });
-

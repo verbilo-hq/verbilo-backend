@@ -15,12 +15,16 @@ describe('AdminUsersService', () => {
   let userFindMany: jest.Mock;
   let userFindFirst: jest.Mock;
   let userUpdate: jest.Mock;
+  let siteFindFirst: jest.Mock;
+  let userSiteAssignmentUpsert: jest.Mock;
+  let userSiteAssignmentDeleteMany: jest.Mock;
   let auditRecord: jest.Mock;
   const actor: DbUserRequestContext = {
     id: 'actor-user-id',
     cognitoId: 'actor-cognito-id',
     tenantId: null,
     siteId: null,
+    siteIds: [],
     role: 'verbilo_super_admin',
   };
 
@@ -29,6 +33,9 @@ describe('AdminUsersService', () => {
     userFindMany = jest.fn();
     userFindFirst = jest.fn();
     userUpdate = jest.fn();
+    siteFindFirst = jest.fn();
+    userSiteAssignmentUpsert = jest.fn();
+    userSiteAssignmentDeleteMany = jest.fn();
     auditRecord = jest.fn().mockResolvedValue(undefined);
 
     const prisma = {
@@ -37,6 +44,11 @@ describe('AdminUsersService', () => {
         findMany: userFindMany,
         findFirst: userFindFirst,
         update: userUpdate,
+      },
+      site: { findFirst: siteFindFirst },
+      userSiteAssignment: {
+        upsert: userSiteAssignmentUpsert,
+        deleteMany: userSiteAssignmentDeleteMany,
       },
     } as unknown as PrismaService;
 
@@ -398,6 +410,226 @@ describe('AdminUsersService', () => {
           targetSnapshot: { tenantId: 'tenant-id', userId: 'user-id' },
         },
       });
+    });
+  });
+
+  describe('assignUserSite', () => {
+    beforeEach(() => {
+      userFindFirst.mockResolvedValue({ id: 'user-id' });
+      siteFindFirst.mockResolvedValue({ id: 'site-id' });
+      userSiteAssignmentUpsert.mockResolvedValue({
+        id: 'assignment-id',
+        userId: 'user-id',
+        siteId: 'site-id',
+      });
+    });
+
+    it('upserts the assignment and writes an audit row', async () => {
+      await expect(
+        service.assignUserSite('tenant-id', 'user-id', 'site-id', actor),
+      ).resolves.toBeUndefined();
+
+      expect(userFindFirst).toHaveBeenCalledWith({
+        where: { id: 'user-id', tenantId: 'tenant-id' },
+        select: { id: true },
+      });
+      expect(siteFindFirst).toHaveBeenCalledWith({
+        where: { id: 'site-id', tenantId: 'tenant-id' },
+        select: { id: true },
+      });
+      expect(userSiteAssignmentUpsert).toHaveBeenCalledWith({
+        where: { userId_siteId: { userId: 'user-id', siteId: 'site-id' } },
+        create: { userId: 'user-id', siteId: 'site-id' },
+        update: {},
+      });
+      expect(auditRecord).toHaveBeenCalledWith({
+        actorUserId: 'actor-user-id',
+        tenantId: 'tenant-id',
+        action: 'user.site.assigned',
+        entityType: 'user',
+        entityId: 'user-id',
+        payload: {
+          actorRole: 'verbilo_super_admin',
+          actorScope: { kind: 'platform' },
+          capability: CAPABILITIES.USERS_ASSIGN_SITE,
+          targetSnapshot: {
+            tenantId: 'tenant-id',
+            userId: 'user-id',
+            siteId: 'site-id',
+          },
+        },
+      });
+    });
+
+    it('is idempotent when re-assigning the same site', async () => {
+      await expect(
+        service.assignUserSite('tenant-id', 'user-id', 'site-id', actor),
+      ).resolves.toBeUndefined();
+
+      expect(userSiteAssignmentUpsert).toHaveBeenCalledTimes(1);
+      expect(auditRecord).toHaveBeenCalledTimes(1);
+    });
+
+    it('throws 404 when the user does not belong to the tenant', async () => {
+      userFindFirst.mockResolvedValue(null);
+
+      await expect(
+        service.assignUserSite('tenant-id', 'missing-user-id', 'site-id', actor),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(siteFindFirst).not.toHaveBeenCalled();
+      expect(userSiteAssignmentUpsert).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalled();
+    });
+
+    it('throws 404 when the site does not belong to the tenant', async () => {
+      siteFindFirst.mockResolvedValue(null);
+
+      await expect(
+        service.assignUserSite('tenant-id', 'user-id', 'wrong-site-id', actor),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(userSiteAssignmentUpsert).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalled();
+    });
+
+    it('rejects site-scoped actors outside their assigned sites', async () => {
+      const areaManager: DbUserRequestContext = {
+        ...actor,
+        role: 'area_manager',
+        tenantId: 'tenant-id',
+        siteId: 'site-1',
+        siteIds: ['site-1', 'site-2'],
+      };
+
+      await expect(
+        service.assignUserSite(
+          'tenant-id',
+          'user-id',
+          'site-3',
+          areaManager,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(userSiteAssignmentUpsert).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unassignUserSite', () => {
+    beforeEach(() => {
+      userFindFirst.mockResolvedValue({ id: 'user-id' });
+      siteFindFirst.mockResolvedValue({ id: 'site-id' });
+      userSiteAssignmentDeleteMany.mockResolvedValue({ count: 1 });
+    });
+
+    it('deletes the assignment and writes an audit row', async () => {
+      const areaManager: DbUserRequestContext = {
+        ...actor,
+        role: 'area_manager',
+        tenantId: 'tenant-id',
+        siteId: 'site-1',
+        siteIds: ['site-1', 'site-2'],
+      };
+
+      await expect(
+        service.unassignUserSite(
+          'tenant-id',
+          'user-id',
+          'site-2',
+          areaManager,
+        ),
+      ).resolves.toBeUndefined();
+
+      expect(userSiteAssignmentDeleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-id', siteId: 'site-2' },
+      });
+      expect(auditRecord).toHaveBeenCalledWith({
+        actorUserId: 'actor-user-id',
+        tenantId: 'tenant-id',
+        action: 'user.site.unassigned',
+        entityType: 'user',
+        entityId: 'user-id',
+        payload: {
+          actorRole: 'area_manager',
+          actorScope: {
+            kind: 'sites',
+            tenantId: 'tenant-id',
+            siteIds: ['site-1', 'site-2'],
+          },
+          capability: CAPABILITIES.USERS_ASSIGN_SITE,
+          targetSnapshot: {
+            tenantId: 'tenant-id',
+            userId: 'user-id',
+            siteId: 'site-2',
+          },
+        },
+      });
+    });
+
+    it('is a 204-style no-op when the assignment is already missing', async () => {
+      userSiteAssignmentDeleteMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.unassignUserSite('tenant-id', 'user-id', 'site-id', actor),
+      ).resolves.toBeUndefined();
+
+      expect(auditRecord).not.toHaveBeenCalled();
+    });
+
+    it('throws 404 when the user does not belong to the tenant', async () => {
+      userFindFirst.mockResolvedValue(null);
+
+      await expect(
+        service.unassignUserSite(
+          'tenant-id',
+          'missing-user-id',
+          'site-id',
+          actor,
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(siteFindFirst).not.toHaveBeenCalled();
+      expect(userSiteAssignmentDeleteMany).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalled();
+    });
+
+    it('throws 404 when the site does not belong to the tenant', async () => {
+      siteFindFirst.mockResolvedValue(null);
+
+      await expect(
+        service.unassignUserSite(
+          'tenant-id',
+          'user-id',
+          'wrong-site-id',
+          actor,
+        ),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(userSiteAssignmentDeleteMany).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalled();
+    });
+
+    it('rejects site-scoped actors outside their assigned sites', async () => {
+      const areaManager: DbUserRequestContext = {
+        ...actor,
+        role: 'area_manager',
+        tenantId: 'tenant-id',
+        siteId: 'site-1',
+        siteIds: ['site-1'],
+      };
+
+      await expect(
+        service.unassignUserSite(
+          'tenant-id',
+          'user-id',
+          'site-2',
+          areaManager,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(userSiteAssignmentDeleteMany).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalled();
     });
   });
 });

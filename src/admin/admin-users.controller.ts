@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   HttpCode,
   Param,
@@ -77,5 +78,53 @@ export class AdminUsersController {
     @Req() request: AdminRequest,
   ): Promise<void> {
     return this.adminUsers.enableUser(tenantId, userId, request.dbUser);
+  }
+
+  @Post(':userId/sites/:siteId')
+  @HttpCode(204)
+  @Roles(
+    'verbilo_super_admin',
+    'verbilo_support',
+    'company_owner',
+    'company_admin',
+    'area_manager',
+  )
+  @RequiresCapability(CAPABILITIES.USERS_ASSIGN_SITE)
+  assignUserSite(
+    @Param('id') tenantId: string,
+    @Param('userId') userId: string,
+    @Param('siteId') siteId: string,
+    @Req() request: AdminRequest,
+  ): Promise<void> {
+    return this.adminUsers.assignUserSite(
+      tenantId,
+      userId,
+      siteId,
+      request.dbUser,
+    );
+  }
+
+  @Delete(':userId/sites/:siteId')
+  @HttpCode(204)
+  @Roles(
+    'verbilo_super_admin',
+    'verbilo_support',
+    'company_owner',
+    'company_admin',
+    'area_manager',
+  )
+  @RequiresCapability(CAPABILITIES.USERS_ASSIGN_SITE)
+  unassignUserSite(
+    @Param('id') tenantId: string,
+    @Param('userId') userId: string,
+    @Param('siteId') siteId: string,
+    @Req() request: AdminRequest,
+  ): Promise<void> {
+    return this.adminUsers.unassignUserSite(
+      tenantId,
+      userId,
+      siteId,
+      request.dbUser,
+    );
   }
 }
