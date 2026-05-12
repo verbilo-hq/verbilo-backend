@@ -1,5 +1,5 @@
 import { type DbUserRequestContext } from './request-context';
-import { type UserRole } from './user-roles';
+import { PLATFORM_ROLES, type UserRole } from './user-roles';
 
 /**
  * The "where" half of role+scope authorization. Resolved from the
@@ -10,10 +10,6 @@ export type ActorScope =
   | { kind: 'tenant'; tenantId: string }
   | { kind: 'sites'; tenantId: string; siteIds: ReadonlySet<string> };
 
-const PLATFORM_ROLES: ReadonlySet<UserRole> = new Set([
-  'verbilo_super_admin',
-  'verbilo_support',
-]);
 const TENANT_WIDE_ROLES: ReadonlySet<UserRole> = new Set([
   'company_owner',
   'company_admin',
@@ -25,13 +21,13 @@ const TENANT_WIDE_ROLES: ReadonlySet<UserRole> = new Set([
 export function resolveActorScope(
   dbUser: DbUserRequestContext,
 ): ActorScope | null {
-  if (PLATFORM_ROLES.has(dbUser.role as UserRole)) {
+  if (PLATFORM_ROLES.has(dbUser.role)) {
     return { kind: 'platform' };
   }
   if (!dbUser.tenantId) {
     return null;
   }
-  if (TENANT_WIDE_ROLES.has(dbUser.role as UserRole)) {
+  if (TENANT_WIDE_ROLES.has(dbUser.role)) {
     return { kind: 'tenant', tenantId: dbUser.tenantId };
   }
   if (dbUser.siteIds.length > 0) {

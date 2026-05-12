@@ -6,20 +6,26 @@ import {
   NestInterceptor,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import type { Prisma } from '@prisma/client';
 import { Observable } from 'rxjs';
 import { mergeMap } from 'rxjs/operators';
 import { AuditService } from '../audit/audit.service';
 import type { CognitoJwtPayload } from '../auth/jwt.strategy';
 import type {
+  ActingInTenantContext,
   DbUserRequestContext,
   TenantRequestContext,
 } from './request-context';
 import { SKIP_AUDIT_LOG_KEY } from './skip-audit-log.decorator';
 
-type AuditRequest = Request & {
+type AuditRequest = Omit<Request, 'route'> & {
   user?: CognitoJwtPayload;
   tenant?: TenantRequestContext;
+  actingInTenant?: ActingInTenantContext;
   dbUser?: DbUserRequestContext;
+  route?: {
+    path?: unknown;
+  };
 };
 
 const MUTATING_METHODS = new Set(['POST', 'PATCH', 'PUT', 'DELETE']);
@@ -48,7 +54,7 @@ export class AuditLogInterceptor implements NestInterceptor {
     }
 
     return next.handle().pipe(
-      mergeMap(async (responseBody) => {
+      mergeMap(async (responseBody: unknown) => {
         await this.tryRecord(request, responseBody);
         return responseBody;
       }),
@@ -70,11 +76,23 @@ export class AuditLogInterceptor implements NestInterceptor {
         entityId: entityId ?? undefined,
         actorUserId: actorUserId ?? undefined,
         tenantId: tenantId ?? undefined,
-        payload: {},
+        payload: this.buildPayload(request),
       });
     } catch {
       // Never crash the request path for audit logging failures.
     }
+  }
+
+  private buildPayload(request: AuditRequest): Prisma.InputJsonObject {
+    if (!request.actingInTenant) {
+      return {};
+    }
+
+    return {
+      actorIsPlatformAdmin: true,
+      actingInTenantSlug: request.actingInTenant.slug,
+      actingInTenantName: request.actingInTenant.name,
+    };
   }
 
   private getAuditRoute(request: AuditRequest): string {

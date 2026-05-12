@@ -1,9 +1,33 @@
 import type { CallHandler, ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+import type { Request } from 'express';
 import { of, throwError } from 'rxjs';
+import { AuditService } from '../audit/audit.service';
 import { AuditLogInterceptor } from './audit-log.interceptor';
 
+type AuditTestRequest = Partial<Request> & {
+  method: string;
+  baseUrl?: string;
+  route?: {
+    path?: string;
+  };
+  user?: {
+    sub: string;
+  };
+  tenant?: {
+    id: string;
+  };
+  actingInTenant?: {
+    id: string;
+    slug: string;
+    name: string;
+    sector: string;
+    enabledModules: string[];
+  };
+};
+
 describe('AuditLogInterceptor', () => {
-  const makeContext = (request: any): ExecutionContext =>
+  const makeContext = (request: AuditTestRequest): ExecutionContext =>
     ({
       switchToHttp: () => ({
         getRequest: () => request,
@@ -12,17 +36,19 @@ describe('AuditLogInterceptor', () => {
       getClass: () => ({}),
     }) as unknown as ExecutionContext;
 
-  const makeHandler = (value: unknown): CallHandler =>
-    ({
-      handle: () => of(value),
-    }) as unknown as CallHandler;
+  const makeHandler = (value: unknown): CallHandler => ({
+    handle: () => of(value),
+  });
 
   it.each(['POST', 'PATCH', 'PUT', 'DELETE'])(
     'records audit log for %s',
     async (method) => {
       const audit = { record: jest.fn().mockResolvedValue(undefined) };
       const reflector = { getAllAndOverride: jest.fn().mockReturnValue(false) };
-      const interceptor = new AuditLogInterceptor(audit as any, reflector as any);
+      const interceptor = new AuditLogInterceptor(
+        audit as unknown as AuditService,
+        reflector as unknown as Reflector,
+      );
 
       const request = {
         method,
@@ -58,7 +84,10 @@ describe('AuditLogInterceptor', () => {
   it('does not record for GET requests', async () => {
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const reflector = { getAllAndOverride: jest.fn().mockReturnValue(false) };
-    const interceptor = new AuditLogInterceptor(audit as any, reflector as any);
+    const interceptor = new AuditLogInterceptor(
+      audit as unknown as AuditService,
+      reflector as unknown as Reflector,
+    );
 
     await new Promise<void>((resolve, reject) => {
       interceptor
@@ -82,7 +111,10 @@ describe('AuditLogInterceptor', () => {
   it('does not record when handler throws', async () => {
     const audit = { record: jest.fn().mockResolvedValue(undefined) };
     const reflector = { getAllAndOverride: jest.fn().mockReturnValue(false) };
-    const interceptor = new AuditLogInterceptor(audit as any, reflector as any);
+    const interceptor = new AuditLogInterceptor(
+      audit as unknown as AuditService,
+      reflector as unknown as Reflector,
+    );
 
     const context = makeContext({
       method: 'POST',
@@ -104,5 +136,49 @@ describe('AuditLogInterceptor', () => {
     ).rejects.toThrow('boom');
 
     expect(audit.record).not.toHaveBeenCalled();
+  });
+
+  it('adds platform-admin acting tenant context to the audit payload', async () => {
+    const audit = { record: jest.fn().mockResolvedValue(undefined) };
+    const reflector = { getAllAndOverride: jest.fn().mockReturnValue(false) };
+    const interceptor = new AuditLogInterceptor(
+      audit as unknown as AuditService,
+      reflector as unknown as Reflector,
+    );
+
+    const request = {
+      method: 'POST',
+      baseUrl: '/admin/users',
+      route: { path: '/' },
+      user: { sub: 'cognito-sub' },
+      tenant: { id: 'tenant-id' },
+      actingInTenant: {
+        id: 'tenant-id',
+        slug: 'riverside-vets',
+        name: 'Riverside Vets',
+        sector: 'vets',
+        enabledModules: [],
+      },
+    };
+
+    await new Promise<void>((resolve, reject) => {
+      interceptor
+        .intercept(makeContext(request), makeHandler({ id: 'entity-id' }))
+        .subscribe({
+          next: () => resolve(),
+          error: reject,
+        });
+    });
+
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        tenantId: 'tenant-id',
+        payload: {
+          actorIsPlatformAdmin: true,
+          actingInTenantSlug: 'riverside-vets',
+          actingInTenantName: 'Riverside Vets',
+        },
+      }),
+    );
   });
 });

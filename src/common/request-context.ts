@@ -8,6 +8,10 @@ export type TenantRequestContext = {
   enabledModules: string[];
 };
 
+export type TenantSlugSource = 'header' | 'host';
+
+export type ActingInTenantContext = TenantRequestContext;
+
 export type DbUserRequestContext = {
   id: string;
   cognitoId: string;
