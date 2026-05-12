@@ -7,6 +7,9 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
+import { CAPABILITIES, type Capability } from '../common/capabilities';
+import { type DbUserRequestContext } from '../common/request-context';
+import { resolveActorScope } from '../common/scope';
 import {
   isReservedSubdomain,
   isValidSlug,
@@ -48,7 +51,7 @@ export class TenantsService {
     private readonly route53Domains: Route53DomainsClient,
   ) {}
 
-  async createTenant(input: CreateTenantInput, actorUserId?: string) {
+  async createTenant(input: CreateTenantInput, actor?: DbUserRequestContext) {
     const name = this.readRequiredString(input.name, 'name');
     const slug = await this.validateNewSlug(input.slug);
     // Defaults to 'healthcare' (sector-agnostic) when none is provided — see
@@ -69,7 +72,7 @@ export class TenantsService {
       });
 
       await this.audit.record({
-        actorUserId,
+        actorUserId: actor?.id,
         tenantId: tenant.id,
         action: 'tenant.created',
         entityType: 'tenant',
@@ -79,7 +82,10 @@ export class TenantsService {
           slug: tenant.slug,
           sector: tenant.sector,
           enabledModules: tenant.enabledModules,
-        },
+          ...this.authorizationAuditPayload(actor, CAPABILITIES.TENANT_CREATE, {
+            tenantId: tenant.id,
+          }),
+        } as Prisma.InputJsonValue,
       });
 
       try {
@@ -89,7 +95,7 @@ export class TenantsService {
         );
 
         await this.audit.record({
-          actorUserId,
+          actorUserId: actor?.id,
           tenantId: tenant.id,
           action: 'tenant.domain.provisioned',
           entityType: 'tenant',
@@ -107,7 +113,7 @@ export class TenantsService {
         );
 
         await this.audit.record({
-          actorUserId,
+          actorUserId: actor?.id,
           tenantId: tenant.id,
           action: 'tenant.domain.provision_failed',
           entityType: 'tenant',
@@ -123,7 +129,7 @@ export class TenantsService {
         const result = await this.route53Domains.createTenantCname(tenant.slug);
 
         await this.audit.record({
-          actorUserId,
+          actorUserId: actor?.id,
           tenantId: tenant.id,
           action: 'tenant.dns.created',
           entityType: 'tenant',
@@ -141,7 +147,7 @@ export class TenantsService {
         );
 
         await this.audit.record({
-          actorUserId,
+          actorUserId: actor?.id,
           tenantId: tenant.id,
           action: 'tenant.dns.create_failed',
           entityType: 'tenant',
@@ -209,7 +215,7 @@ export class TenantsService {
   async updateTenant(
     id: string,
     input: UpdateTenantInput,
-    actorUserId?: string,
+    actor?: DbUserRequestContext,
   ) {
     if (input.slug !== undefined) {
       throw new BadRequestException('Tenant slug cannot be changed here');
@@ -285,18 +291,26 @@ export class TenantsService {
     });
 
     await this.audit.record({
-      actorUserId,
+      actorUserId: actor?.id,
       tenantId: updatedTenant.id,
       action: 'tenant.settings.updated',
       entityType: 'tenant',
       entityId: updatedTenant.id,
-      payload: { diff } as Prisma.InputJsonValue,
+      payload: {
+        diff,
+        ...this.authorizationAuditPayload(actor, CAPABILITIES.TENANT_UPDATE, {
+          tenantId: updatedTenant.id,
+        }),
+      } as Prisma.InputJsonValue,
     });
 
     return this.withTenantUrl(updatedTenant);
   }
 
-  async deleteTenant(id: string, actorUserId?: string): Promise<void> {
+  async deleteTenant(
+    id: string,
+    actor?: DbUserRequestContext,
+  ): Promise<void> {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id },
     });
@@ -317,12 +331,17 @@ export class TenantsService {
     await this.prisma.$transaction(async (tx) => {
       await tx.auditLog.create({
         data: {
-          actorUserId,
+          actorUserId: actor?.id,
           tenantId: tenant.id,
           action: 'tenant.deleted',
           entityType: 'tenant',
           entityId: tenant.id,
-          payloadJson: { snapshot } as Prisma.InputJsonValue,
+          payloadJson: {
+            snapshot,
+            ...this.authorizationAuditPayload(actor, CAPABILITIES.TENANT_DELETE, {
+              tenantId: tenant.id,
+            }),
+          } as Prisma.InputJsonValue,
         },
       });
 
@@ -333,7 +352,7 @@ export class TenantsService {
       const result = await this.route53Domains.removeTenantCname(tenant.slug);
 
       await this.audit.record({
-        actorUserId,
+        actorUserId: actor?.id,
         action: 'tenant.dns.removed',
         entityType: 'tenant',
         entityId: tenant.id,
@@ -350,7 +369,7 @@ export class TenantsService {
       );
 
       await this.audit.record({
-        actorUserId,
+        actorUserId: actor?.id,
         action: 'tenant.dns.remove_failed',
         entityType: 'tenant',
         entityId: tenant.id,
@@ -366,7 +385,7 @@ export class TenantsService {
       const result = await this.vercelDomains.removeTenantDomain(tenant.slug);
 
       await this.audit.record({
-        actorUserId,
+        actorUserId: actor?.id,
         action: 'tenant.domain.removed',
         entityType: 'tenant',
         entityId: tenant.id,
@@ -382,7 +401,7 @@ export class TenantsService {
       );
 
       await this.audit.record({
-        actorUserId,
+        actorUserId: actor?.id,
         action: 'tenant.domain.remove_failed',
         entityType: 'tenant',
         entityId: tenant.id,
@@ -414,6 +433,19 @@ export class TenantsService {
     }
 
     return tenant;
+  }
+
+  private authorizationAuditPayload(
+    actor: DbUserRequestContext | undefined,
+    capability: Capability,
+    targetSnapshot: Record<string, unknown>,
+  ) {
+    return {
+      ...(actor ? { actorRole: actor.role } : {}),
+      actorScope: actor ? resolveActorScope(actor) : null,
+      capability,
+      targetSnapshot,
+    };
   }
 
   private async validateNewSlug(rawSlug: unknown): Promise<string> {

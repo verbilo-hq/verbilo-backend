@@ -1,5 +1,11 @@
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
+import { CAPABILITIES } from '../common/capabilities';
+import { type DbUserRequestContext } from '../common/request-context';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminUsersService } from './admin-users.service';
 
@@ -10,6 +16,13 @@ describe('AdminUsersService', () => {
   let userFindFirst: jest.Mock;
   let userUpdate: jest.Mock;
   let auditRecord: jest.Mock;
+  const actor: DbUserRequestContext = {
+    id: 'actor-user-id',
+    cognitoId: 'actor-cognito-id',
+    tenantId: null,
+    siteId: null,
+    role: 'verbilo_super_admin',
+  };
 
   beforeEach(() => {
     tenantFindUnique = jest.fn();
@@ -109,7 +122,7 @@ describe('AdminUsersService', () => {
           'tenant-id',
           'user-id',
           'not-a-role' as any,
-          'actor-user-id',
+          actor,
         ),
       ).rejects.toBeInstanceOf(BadRequestException);
 
@@ -126,7 +139,7 @@ describe('AdminUsersService', () => {
           'tenant-id',
           'missing-user-id',
           'employee',
-          'actor-user-id',
+          actor,
         ),
       ).rejects.toBeInstanceOf(NotFoundException);
 
@@ -162,7 +175,7 @@ describe('AdminUsersService', () => {
           'tenant-id',
           'user-id',
           'company_admin',
-          'actor-user-id',
+          actor,
         ),
       ).resolves.toEqual({
         id: 'user-id',
@@ -186,8 +199,47 @@ describe('AdminUsersService', () => {
         action: 'user.role_changed',
         entityType: 'user',
         entityId: 'user-id',
-        payload: { from: 'employee', to: 'company_admin', userId: 'user-id' },
+        payload: {
+          from: 'employee',
+          to: 'company_admin',
+          userId: 'user-id',
+          actorRole: 'verbilo_super_admin',
+          actorScope: { kind: 'platform' },
+          capability: CAPABILITIES.USERS_UPDATE_ROLE,
+          targetSnapshot: { tenantId: 'tenant-id', userId: 'user-id' },
+        },
       });
+    });
+
+    it('rejects role assignment above the actor rank', async () => {
+      const createdAt = new Date('2026-05-10T10:00:00.000Z');
+      const companyAdmin: DbUserRequestContext = {
+        ...actor,
+        role: 'company_admin',
+        tenantId: 'tenant-id',
+      };
+
+      userFindFirst.mockResolvedValue({
+        id: 'user-id',
+        username: 'alice',
+        role: 'employee',
+        siteId: null,
+        createdAt,
+        deletedAt: null,
+        site: null,
+      });
+
+      await expect(
+        service.updateUserRole(
+          'tenant-id',
+          'user-id',
+          'company_owner',
+          companyAdmin,
+        ),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(userUpdate).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalled();
     });
 
     it('returns the existing summary when the role is unchanged', async () => {
@@ -208,7 +260,7 @@ describe('AdminUsersService', () => {
           'tenant-id',
           'user-id',
           'employee',
-          'actor-user-id',
+          actor,
         ),
       ).resolves.toEqual({
         id: 'user-id',
@@ -230,7 +282,7 @@ describe('AdminUsersService', () => {
       userFindFirst.mockResolvedValue(null);
 
       await expect(
-        service.disableUser('tenant-id', 'missing-user-id', 'actor-user-id'),
+        service.disableUser('tenant-id', 'missing-user-id', actor),
       ).rejects.toBeInstanceOf(NotFoundException);
 
       expect(userUpdate).not.toHaveBeenCalled();
@@ -240,11 +292,13 @@ describe('AdminUsersService', () => {
     it('is idempotent when the user is already disabled', async () => {
       userFindFirst.mockResolvedValue({
         id: 'user-id',
+        role: 'employee',
+        siteId: null,
         deletedAt: new Date('2026-05-10T12:00:00.000Z'),
       });
 
       await expect(
-        service.disableUser('tenant-id', 'user-id', 'actor-user-id'),
+        service.disableUser('tenant-id', 'user-id', actor),
       ).resolves.toBeUndefined();
 
       expect(userUpdate).not.toHaveBeenCalled();
@@ -252,11 +306,16 @@ describe('AdminUsersService', () => {
     });
 
     it('sets deletedAt and writes an audit row', async () => {
-      userFindFirst.mockResolvedValue({ id: 'user-id', deletedAt: null });
+      userFindFirst.mockResolvedValue({
+        id: 'user-id',
+        role: 'employee',
+        siteId: null,
+        deletedAt: null,
+      });
       userUpdate.mockResolvedValue({ id: 'user-id' });
 
       await expect(
-        service.disableUser('tenant-id', 'user-id', 'actor-user-id'),
+        service.disableUser('tenant-id', 'user-id', actor),
       ).resolves.toBeUndefined();
 
       expect(userUpdate).toHaveBeenCalledWith({
@@ -270,6 +329,12 @@ describe('AdminUsersService', () => {
         action: 'user.disabled',
         entityType: 'user',
         entityId: 'user-id',
+        payload: {
+          actorRole: 'verbilo_super_admin',
+          actorScope: { kind: 'platform' },
+          capability: CAPABILITIES.USERS_DISABLE,
+          targetSnapshot: { tenantId: 'tenant-id', userId: 'user-id' },
+        },
       });
     });
   });
@@ -279,7 +344,7 @@ describe('AdminUsersService', () => {
       userFindFirst.mockResolvedValue(null);
 
       await expect(
-        service.enableUser('tenant-id', 'missing-user-id', 'actor-user-id'),
+        service.enableUser('tenant-id', 'missing-user-id', actor),
       ).rejects.toBeInstanceOf(NotFoundException);
 
       expect(userUpdate).not.toHaveBeenCalled();
@@ -287,10 +352,15 @@ describe('AdminUsersService', () => {
     });
 
     it('is idempotent when the user is already enabled', async () => {
-      userFindFirst.mockResolvedValue({ id: 'user-id', deletedAt: null });
+      userFindFirst.mockResolvedValue({
+        id: 'user-id',
+        role: 'employee',
+        siteId: null,
+        deletedAt: null,
+      });
 
       await expect(
-        service.enableUser('tenant-id', 'user-id', 'actor-user-id'),
+        service.enableUser('tenant-id', 'user-id', actor),
       ).resolves.toBeUndefined();
 
       expect(userUpdate).not.toHaveBeenCalled();
@@ -300,12 +370,14 @@ describe('AdminUsersService', () => {
     it('clears deletedAt and writes an audit row', async () => {
       userFindFirst.mockResolvedValue({
         id: 'user-id',
+        role: 'employee',
+        siteId: null,
         deletedAt: new Date('2026-05-10T12:00:00.000Z'),
       });
       userUpdate.mockResolvedValue({ id: 'user-id' });
 
       await expect(
-        service.enableUser('tenant-id', 'user-id', 'actor-user-id'),
+        service.enableUser('tenant-id', 'user-id', actor),
       ).resolves.toBeUndefined();
 
       expect(userUpdate).toHaveBeenCalledWith({
@@ -319,8 +391,13 @@ describe('AdminUsersService', () => {
         action: 'user.enabled',
         entityType: 'user',
         entityId: 'user-id',
+        payload: {
+          actorRole: 'verbilo_super_admin',
+          actorScope: { kind: 'platform' },
+          capability: CAPABILITIES.USERS_DISABLE,
+          targetSnapshot: { tenantId: 'tenant-id', userId: 'user-id' },
+        },
       });
     });
   });
 });
-
