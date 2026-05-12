@@ -46,6 +46,7 @@ model Site {
   tenantId     String        @db.Uuid
   tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   users        User[]
+  siteAssignments UserSiteAssignment[]
   patients     Patient[]
   appointments Appointment[]
   staff        StaffMember[]
@@ -62,8 +63,22 @@ model User {
   site                  Site?         @relation(fields: [siteId], references: [id])
   createdAt             DateTime      @default(now())
   deletedAt             DateTime?
+  siteAssignments       UserSiteAssignment[]
   appointmentsAsPractitioner Appointment[]
   staffMember           StaffMember?
+}
+
+model UserSiteAssignment {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @db.Uuid
+  siteId    String   @db.Uuid
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  site      Site     @relation(fields: [siteId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, siteId])
+  @@index([userId])
+  @@index([siteId])
 }
 
 model Patient {

@@ -58,6 +58,7 @@ export class RolesGuard implements CanActivate {
         tenantId: true,
         siteId: true,
         role: true,
+        siteAssignments: { select: { siteId: true } },
       },
     });
 
@@ -66,9 +67,12 @@ export class RolesGuard implements CanActivate {
     }
 
     return {
-      ...dbUser,
+      id: dbUser.id,
       cognitoId: dbUser.cognitoId,
+      tenantId: dbUser.tenantId,
+      siteId: dbUser.siteId,
       role: dbUser.role,
+      siteIds: dbUser.siteAssignments.map((assignment) => assignment.siteId),
     };
   }
 }

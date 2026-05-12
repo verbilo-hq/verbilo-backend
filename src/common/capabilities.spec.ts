@@ -33,6 +33,9 @@ describe('capabilities', () => {
     expect(
       hasCapability('verbilo_support', CAPABILITIES.USERS_UPDATE_ROLE),
     ).toBe(false);
+    expect(
+      hasCapability('verbilo_support', CAPABILITIES.USERS_ASSIGN_SITE),
+    ).toBe(true);
   });
 
   it('grants tenant user-management capabilities to tenant managers and owners', () => {
@@ -50,6 +53,30 @@ describe('capabilities', () => {
       expect(hasCapability(role, CAPABILITIES.USERS_DISABLE)).toBe(true);
       expect(hasCapability(role, CAPABILITIES.USERS_RESET_PASSWORD)).toBe(true);
     }
+  });
+
+  it('grants site assignment only to support, tenant admins, and area managers', () => {
+    expect(
+      hasCapability('verbilo_super_admin', CAPABILITIES.USERS_ASSIGN_SITE),
+    ).toBe(true);
+    expect(
+      hasCapability('verbilo_support', CAPABILITIES.USERS_ASSIGN_SITE),
+    ).toBe(true);
+    expect(
+      hasCapability('company_owner', CAPABILITIES.USERS_ASSIGN_SITE),
+    ).toBe(true);
+    expect(
+      hasCapability('company_admin', CAPABILITIES.USERS_ASSIGN_SITE),
+    ).toBe(true);
+    expect(
+      hasCapability('area_manager', CAPABILITIES.USERS_ASSIGN_SITE),
+    ).toBe(true);
+    expect(
+      hasCapability('practice_manager', CAPABILITIES.USERS_ASSIGN_SITE),
+    ).toBe(false);
+    expect(hasCapability('employee', CAPABILITIES.USERS_ASSIGN_SITE)).toBe(
+      false,
+    );
   });
 
   it('keeps tenant lifecycle capabilities above site-scoped roles', () => {

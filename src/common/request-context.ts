@@ -13,5 +13,6 @@ export type DbUserRequestContext = {
   cognitoId: string;
   tenantId: string | null;
   siteId: string | null;
+  siteIds: string[];
   role: UserRole;
 };

@@ -12,6 +12,7 @@ function dbUser(
     role,
     tenantId: 'tenant-1',
     siteId: 'site-1',
+    siteIds: ['site-1'],
     ...overrides,
   };
 }
@@ -19,13 +20,21 @@ function dbUser(
 describe('scope', () => {
   it('resolves actor scope for each role', () => {
     const expected = {
-      employee: { kind: 'site', tenantId: 'tenant-1', siteId: 'site-1' },
-      practice_manager: {
-        kind: 'site',
+      employee: {
+        kind: 'sites',
         tenantId: 'tenant-1',
-        siteId: 'site-1',
+        siteIds: new Set(['site-1']),
       },
-      area_manager: { kind: 'site', tenantId: 'tenant-1', siteId: 'site-1' },
+      practice_manager: {
+        kind: 'sites',
+        tenantId: 'tenant-1',
+        siteIds: new Set(['site-1']),
+      },
+      area_manager: {
+        kind: 'sites',
+        tenantId: 'tenant-1',
+        siteIds: new Set(['site-1']),
+      },
       company_admin: { kind: 'tenant', tenantId: 'tenant-1' },
       company_owner: { kind: 'tenant', tenantId: 'tenant-1' },
       verbilo_support: { kind: 'platform' },
@@ -41,13 +50,25 @@ describe('scope', () => {
     expect(resolveActorScope(dbUser('company_admin', { tenantId: null }))).toBe(
       null,
     );
-    expect(resolveActorScope(dbUser('area_manager', { siteId: null }))).toBe(
-      null,
-    );
     expect(
-      resolveActorScope(dbUser('practice_manager', { siteId: null })),
+      resolveActorScope(dbUser('area_manager', { siteId: null, siteIds: [] })),
     ).toBe(null);
-    expect(resolveActorScope(dbUser('employee', { siteId: null }))).toBe(null);
+    expect(
+      resolveActorScope(
+        dbUser('practice_manager', { siteId: null, siteIds: [] }),
+      ),
+    ).toBe(null);
+    expect(
+      resolveActorScope(dbUser('employee', { siteId: null, siteIds: [] })),
+    ).toBe(null);
+  });
+
+  it('falls back to legacy siteId when assignments are missing', () => {
+    expect(resolveActorScope(dbUser('area_manager', { siteIds: [] }))).toEqual({
+      kind: 'sites',
+      tenantId: 'tenant-1',
+      siteIds: new Set(['site-1']),
+    });
   });
 
   it('allows platform scope to target any tenant or site', () => {
@@ -72,20 +93,23 @@ describe('scope', () => {
     expect(canActOnTarget(actor, { tenantId: 'tenant-2' })).toBe(false);
   });
 
-  it('allows site scope only for the same tenant and same explicit site', () => {
+  it('allows sites scope for any assigned explicit site in the same tenant', () => {
     const actor = {
-      kind: 'site',
+      kind: 'sites',
       tenantId: 'tenant-1',
-      siteId: 'site-1',
+      siteIds: new Set(['site-1', 'site-2']),
     } as const;
 
     expect(
       canActOnTarget(actor, { tenantId: 'tenant-1', siteId: 'site-1' }),
     ).toBe(true);
-    expect(canActOnTarget(actor, { tenantId: 'tenant-1' })).toBe(false);
     expect(
       canActOnTarget(actor, { tenantId: 'tenant-1', siteId: 'site-2' }),
+    ).toBe(true);
+    expect(
+      canActOnTarget(actor, { tenantId: 'tenant-1', siteId: 'site-3' }),
     ).toBe(false);
+    expect(canActOnTarget(actor, { tenantId: 'tenant-1' })).toBe(false);
     expect(
       canActOnTarget(actor, { tenantId: 'tenant-2', siteId: 'site-1' }),
     ).toBe(false);

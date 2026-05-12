@@ -35,6 +35,7 @@ describe('TenantsService', () => {
     cognitoId: 'actor-cognito-id',
     tenantId: null,
     siteId: null,
+    siteIds: [],
     role: 'verbilo_super_admin',
   };
 
