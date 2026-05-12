@@ -1,6 +1,18 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
+import {
+  CAPABILITIES,
+  type Capability,
+  roleRanksAtOrAbove,
+} from '../common/capabilities';
+import { type DbUserRequestContext } from '../common/request-context';
+import { canActOnTarget, resolveActorScope } from '../common/scope';
 import { isUserRole, UserRole, USER_ROLES } from '../common/user-roles';
 import { PrismaService } from '../prisma/prisma.service';
 
@@ -54,7 +66,7 @@ export class AdminUsersService {
     tenantId: string,
     userId: string,
     role: UserRole,
-    actorUserId?: string,
+    actor?: DbUserRequestContext,
   ): Promise<AdminUserSummary> {
     this.assertRole(role);
 
@@ -68,6 +80,10 @@ export class AdminUsersService {
     }
 
     const previousRole = user.role;
+    this.assertRole(previousRole);
+    this.assertActorCanActOnUser(actor, tenantId, user.siteId);
+    this.assertActorCanTargetRole(actor, previousRole);
+    this.assertActorCanTargetRole(actor, role);
 
     if (previousRole === role) {
       return this.toSummary(user);
@@ -80,12 +96,24 @@ export class AdminUsersService {
     });
 
     await this.audit.record({
-      actorUserId,
+      actorUserId: actor?.id,
       tenantId,
       action: 'user.role_changed',
       entityType: 'user',
       entityId: userId,
-      payload: { from: previousRole, to: role, userId } as Prisma.InputJsonValue,
+      payload: {
+        from: previousRole,
+        to: role,
+        userId,
+        ...this.authorizationAuditPayload(
+          actor,
+          CAPABILITIES.USERS_UPDATE_ROLE,
+          {
+            tenantId,
+            userId,
+          },
+        ),
+      } as Prisma.InputJsonValue,
     });
 
     return this.toSummary(updatedUser);
@@ -94,16 +122,20 @@ export class AdminUsersService {
   async disableUser(
     tenantId: string,
     userId: string,
-    actorUserId?: string,
+    actor?: DbUserRequestContext,
   ): Promise<void> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
-      select: { id: true, deletedAt: true },
+      select: { id: true, role: true, siteId: true, deletedAt: true },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    this.assertRole(user.role);
+    this.assertActorCanActOnUser(actor, tenantId, user.siteId);
+    this.assertActorCanTargetRole(actor, user.role);
 
     if (user.deletedAt) {
       return;
@@ -115,27 +147,35 @@ export class AdminUsersService {
     });
 
     await this.audit.record({
-      actorUserId,
+      actorUserId: actor?.id,
       tenantId,
       action: 'user.disabled',
       entityType: 'user',
       entityId: userId,
+      payload: this.authorizationAuditPayload(actor, CAPABILITIES.USERS_DISABLE, {
+        tenantId,
+        userId,
+      }) as Prisma.InputJsonValue,
     });
   }
 
   async enableUser(
     tenantId: string,
     userId: string,
-    actorUserId?: string,
+    actor?: DbUserRequestContext,
   ): Promise<void> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
-      select: { id: true, deletedAt: true },
+      select: { id: true, role: true, siteId: true, deletedAt: true },
     });
 
     if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    this.assertRole(user.role);
+    this.assertActorCanActOnUser(actor, tenantId, user.siteId);
+    this.assertActorCanTargetRole(actor, user.role);
 
     if (!user.deletedAt) {
       return;
@@ -147,11 +187,15 @@ export class AdminUsersService {
     });
 
     await this.audit.record({
-      actorUserId,
+      actorUserId: actor?.id,
       tenantId,
       action: 'user.enabled',
       entityType: 'user',
       entityId: userId,
+      payload: this.authorizationAuditPayload(actor, CAPABILITIES.USERS_DISABLE, {
+        tenantId,
+        userId,
+      }) as Prisma.InputJsonValue,
     });
   }
 
@@ -174,5 +218,51 @@ export class AdminUsersService {
       );
     }
   }
-}
 
+  private assertActorCanActOnUser(
+    actor: DbUserRequestContext | undefined,
+    tenantId: string,
+    siteId: string | null,
+  ) {
+    if (!actor) {
+      throw new ForbiddenException('Actor unresolved');
+    }
+
+    const actorScope = resolveActorScope(actor);
+    if (!actorScope) {
+      throw new ForbiddenException('Actor scope unresolved');
+    }
+
+    if (!canActOnTarget(actorScope, { tenantId, siteId })) {
+      throw new ForbiddenException('Actor scope cannot target user');
+    }
+  }
+
+  private assertActorCanTargetRole(
+    actor: DbUserRequestContext | undefined,
+    role: UserRole,
+  ) {
+    if (!actor) {
+      throw new ForbiddenException('Actor unresolved');
+    }
+
+    if (!roleRanksAtOrAbove(actor.role, role)) {
+      throw new ForbiddenException(
+        `Role ${actor.role} cannot act on role ${role}`,
+      );
+    }
+  }
+
+  private authorizationAuditPayload(
+    actor: DbUserRequestContext | undefined,
+    capability: Capability,
+    targetSnapshot: Record<string, unknown>,
+  ) {
+    return {
+      ...(actor ? { actorRole: actor.role } : {}),
+      actorScope: actor ? resolveActorScope(actor) : null,
+      capability,
+      targetSnapshot,
+    };
+  }
+}

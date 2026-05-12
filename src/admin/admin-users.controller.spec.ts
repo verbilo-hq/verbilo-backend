@@ -1,5 +1,7 @@
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
+import { CAPABILITIES } from '../common/capabilities';
+import { REQUIRES_CAPABILITY_KEY } from '../common/requires-capability.decorator';
 import { ROLES_KEY } from '../common/roles.decorator';
 import { AdminUsersController } from './admin-users.controller';
 import { AdminUsersService } from './admin-users.service';
@@ -12,6 +14,13 @@ describe('AdminUsersController', () => {
     updateUserRole: jest.Mock;
     disableUser: jest.Mock;
     enableUser: jest.Mock;
+  };
+  const actor = {
+    id: 'actor-user-id',
+    cognitoId: 'actor-cognito-id',
+    tenantId: null,
+    siteId: null,
+    role: 'verbilo_super_admin',
   };
 
   beforeEach(() => {
@@ -47,6 +56,33 @@ describe('AdminUsersController', () => {
     ).toEqual(['verbilo_super_admin']);
   });
 
+  it('declares capability requirements on protected handlers', () => {
+    expect(
+      Reflect.getMetadata(
+        REQUIRES_CAPABILITY_KEY,
+        AdminUsersController.prototype.listUsers,
+      ),
+    ).toBe(CAPABILITIES.USERS_LIST);
+    expect(
+      Reflect.getMetadata(
+        REQUIRES_CAPABILITY_KEY,
+        AdminUsersController.prototype.updateUserRole,
+      ),
+    ).toBe(CAPABILITIES.USERS_UPDATE_ROLE);
+    expect(
+      Reflect.getMetadata(
+        REQUIRES_CAPABILITY_KEY,
+        AdminUsersController.prototype.disableUser,
+      ),
+    ).toBe(CAPABILITIES.USERS_DISABLE);
+    expect(
+      Reflect.getMetadata(
+        REQUIRES_CAPABILITY_KEY,
+        AdminUsersController.prototype.enableUser,
+      ),
+    ).toBe(CAPABILITIES.USERS_DISABLE);
+  });
+
   it('validates UpdateTenantUserDto roles against USER_ROLES', () => {
     const ok = validateSync(
       plainToInstance(UpdateTenantUserDto, { role: 'company_admin' }),
@@ -77,7 +113,7 @@ describe('AdminUsersController', () => {
         'tenant-id',
         'user-id',
         { role: 'company_admin' },
-        { dbUser: { id: 'actor-user-id' } } as any,
+        { dbUser: actor } as any,
       ),
     ).resolves.toEqual({ id: 'user-id' });
 
@@ -85,7 +121,7 @@ describe('AdminUsersController', () => {
       'tenant-id',
       'user-id',
       'company_admin',
-      'actor-user-id',
+      actor,
     );
   });
 
@@ -94,14 +130,14 @@ describe('AdminUsersController', () => {
 
     await expect(
       controller.disableUser('tenant-id', 'user-id', {
-        dbUser: { id: 'actor-user-id' },
+        dbUser: actor,
       } as any),
     ).resolves.toBeUndefined();
 
     expect(service.disableUser).toHaveBeenCalledWith(
       'tenant-id',
       'user-id',
-      'actor-user-id',
+      actor,
     );
   });
 
@@ -110,15 +146,14 @@ describe('AdminUsersController', () => {
 
     await expect(
       controller.enableUser('tenant-id', 'user-id', {
-        dbUser: { id: 'actor-user-id' },
+        dbUser: actor,
       } as any),
     ).resolves.toBeUndefined();
 
     expect(service.enableUser).toHaveBeenCalledWith(
       'tenant-id',
       'user-id',
-      'actor-user-id',
+      actor,
     );
   });
 });
-

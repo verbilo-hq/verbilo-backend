@@ -4,6 +4,8 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { AuditService } from '../audit/audit.service';
+import { CAPABILITIES } from '../common/capabilities';
+import { type DbUserRequestContext } from '../common/request-context';
 import type { Route53DomainsClient } from '../integrations/aws/route53.client';
 import { VercelDomainsClient } from '../integrations/vercel/vercel-domains.client';
 import { PrismaService } from '../prisma/prisma.service';
@@ -17,6 +19,7 @@ describe('TenantsService', () => {
   let service: TenantsService;
   let tenantFindUnique: jest.Mock;
   let tenantCreate: jest.Mock;
+  let tenantUpdate: jest.Mock;
   let tenantDelete: jest.Mock;
   let auditLogCreate: jest.Mock;
   let transaction: jest.Mock;
@@ -27,10 +30,18 @@ describe('TenantsService', () => {
   let createTenantCname: jest.Mock;
   let removeTenantCname: jest.Mock;
   let route53HostnameForSlug: jest.Mock;
+  const actor: DbUserRequestContext = {
+    id: 'actor-user-id',
+    cognitoId: 'actor-cognito-id',
+    tenantId: null,
+    siteId: null,
+    role: 'verbilo_super_admin',
+  };
 
   beforeEach(() => {
     tenantFindUnique = jest.fn();
     tenantCreate = jest.fn();
+    tenantUpdate = jest.fn();
     tenantDelete = jest.fn();
     auditLogCreate = jest.fn().mockResolvedValue(undefined);
     transaction = jest.fn(async (callback: any) =>
@@ -65,6 +76,7 @@ describe('TenantsService', () => {
       tenant: {
         findUnique: tenantFindUnique,
         create: tenantCreate,
+        update: tenantUpdate,
       },
       $transaction: transaction,
     } as unknown as PrismaService;
@@ -176,7 +188,7 @@ describe('TenantsService', () => {
           sector: 'dental',
           enabledModules: ['documents'],
         },
-        'actor-user-id',
+        actor,
       ),
     ).resolves.toEqual({
       ...tenant,
@@ -202,6 +214,10 @@ describe('TenantsService', () => {
         slug: 'acme-dental',
         sector: 'dental',
         enabledModules: ['documents'],
+        actorRole: 'verbilo_super_admin',
+        actorScope: { kind: 'platform' },
+        capability: CAPABILITIES.TENANT_CREATE,
+        targetSnapshot: { tenantId: 'tenant-id' },
       },
     });
     expect(provisionTenantDomain).toHaveBeenCalledWith('acme-dental', 'main');
@@ -276,7 +292,7 @@ describe('TenantsService', () => {
           slug: 'acme-dental',
           sector: 'dental',
         },
-        'actor-user-id',
+        actor,
       ),
     ).resolves.toMatchObject({
       id: 'tenant-id',
@@ -333,7 +349,7 @@ describe('TenantsService', () => {
           slug: 'acme-dental',
           sector: 'dental',
         },
-        'actor-user-id',
+        actor,
       ),
     ).resolves.toMatchObject({
       id: 'tenant-id',
@@ -390,6 +406,70 @@ describe('TenantsService', () => {
     });
   });
 
+  it('updates tenants and writes authorization context in the audit payload', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const existingTenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      archivedAt: null,
+      createdAt,
+    };
+    const updatedTenant = {
+      ...existingTenant,
+      name: 'Acme Health',
+      enabledModules: ['documents', 'staff'],
+    };
+
+    tenantFindUnique.mockResolvedValue(existingTenant);
+    tenantUpdate.mockResolvedValue(updatedTenant);
+
+    await expect(
+      service.updateTenant(
+        'tenant-id',
+        {
+          name: 'Acme Health',
+          enabledModules: ['documents', 'staff'],
+        },
+        actor,
+      ),
+    ).resolves.toEqual({
+      ...updatedTenant,
+      url: 'https://acme-dental.verbilo.co.uk',
+    });
+
+    expect(tenantUpdate).toHaveBeenCalledWith({
+      where: { id: 'tenant-id' },
+      data: {
+        name: 'Acme Health',
+        enabledModules: ['documents', 'staff'],
+      },
+    });
+    expect(auditRecord).toHaveBeenCalledWith({
+      actorUserId: 'actor-user-id',
+      tenantId: 'tenant-id',
+      action: 'tenant.settings.updated',
+      entityType: 'tenant',
+      entityId: 'tenant-id',
+      payload: {
+        diff: {
+          name: { from: 'Acme Dental', to: 'Acme Health' },
+          enabledModules: {
+            from: ['documents'],
+            to: ['documents', 'staff'],
+          },
+        },
+        actorRole: 'verbilo_super_admin',
+        actorScope: { kind: 'platform' },
+        capability: CAPABILITIES.TENANT_UPDATE,
+        targetSnapshot: { tenantId: 'tenant-id' },
+      },
+    });
+  });
+
   it('deletes tenants, removes the Vercel domain, and writes audit rows', async () => {
     const createdAt = new Date('2026-05-10T10:00:00.000Z');
     const tenant = {
@@ -415,7 +495,7 @@ describe('TenantsService', () => {
     });
 
     await expect(
-      service.deleteTenant('tenant-id', 'actor-user-id'),
+      service.deleteTenant('tenant-id', actor),
     ).resolves.toBeUndefined();
 
     expect(tenantFindUnique).toHaveBeenCalledWith({
@@ -438,6 +518,10 @@ describe('TenantsService', () => {
             enabledModules: ['documents'],
             createdAt,
           },
+          actorRole: 'verbilo_super_admin',
+          actorScope: { kind: 'platform' },
+          capability: CAPABILITIES.TENANT_DELETE,
+          targetSnapshot: { tenantId: 'tenant-id' },
         },
       },
     });
@@ -479,7 +563,7 @@ describe('TenantsService', () => {
     tenantFindUnique.mockResolvedValue(null);
 
     await expect(
-      service.deleteTenant('missing-tenant-id', 'actor-user-id'),
+      service.deleteTenant('missing-tenant-id', actor),
     ).rejects.toBeInstanceOf(NotFoundException);
 
     expect(transaction).not.toHaveBeenCalled();
@@ -507,7 +591,7 @@ describe('TenantsService', () => {
     removeTenantDomain.mockRejectedValue(new Error('boom'));
 
     await expect(
-      service.deleteTenant('tenant-id', 'actor-user-id'),
+      service.deleteTenant('tenant-id', actor),
     ).resolves.toBeUndefined();
 
     expect(removeTenantCname).toHaveBeenCalledWith('acme-dental');
@@ -541,7 +625,7 @@ describe('TenantsService', () => {
     removeTenantCname.mockRejectedValue(new Error('r53 boom'));
 
     await expect(
-      service.deleteTenant('tenant-id', 'actor-user-id'),
+      service.deleteTenant('tenant-id', actor),
     ).resolves.toBeUndefined();
 
     expect(auditRecord).toHaveBeenCalledWith(
