@@ -11,8 +11,14 @@ import { plainToInstance } from 'class-transformer';
 import { Request } from 'express';
 import { CognitoJwtPayload } from '../auth/jwt.strategy';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
+import { Roles } from '../common/roles.decorator';
+import { RolesGuard } from '../common/roles.guard';
 import { SkipAuditLog } from '../common/skip-audit-log.decorator';
-import { TenantRequestContext } from '../common/request-context';
+import {
+  DbUserRequestContext,
+  TenantRequestContext,
+} from '../common/request-context';
+import { USER_ROLES } from '../common/user-roles';
 import { UserMeDto } from './dto/user-me.dto';
 import { UsersService } from './users.service';
 
@@ -39,6 +45,19 @@ export class UsersController {
     return plainToInstance(UserMeDto, user, {
       excludeExtraneousValues: true,
     });
+  }
+
+  @Get('me/permissions')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(...USER_ROLES)
+  @Throttle({ default: { limit: 10, ttl: 60_000 } })
+  async getMyPermissions(
+    @Req()
+    request: Request & {
+      dbUser: DbUserRequestContext;
+    },
+  ) {
+    return this.usersService.getMyPermissions(request.dbUser);
   }
 
   @Get('me/export')
