@@ -95,6 +95,7 @@ describe('UsersService', () => {
           'tenant.update_branding',
           'users.assign_site',
           'users.create',
+          'users.delete',
           'users.disable',
           'users.list',
           'users.reset_password',
@@ -115,6 +116,7 @@ describe('UsersService', () => {
         capabilities: [
           'users.assign_site',
           'users.create',
+          'users.delete',
           'users.disable',
           'users.list',
           'users.reset_password',
@@ -156,7 +158,12 @@ describe('UsersService', () => {
       siteId: 'site-1',
       createdAt: new Date('2026-05-01T00:00:00.000Z'),
       deletedAt: null,
-      tenant: { id: 'tenant-1', name: 'Tenant', slug: 'tenant', sector: 'dental' },
+      tenant: {
+        id: 'tenant-1',
+        name: 'Tenant',
+        slug: 'tenant',
+        sector: 'dental',
+      },
       site: { id: 'site-1', name: 'Site' },
     });
 
@@ -201,7 +208,12 @@ describe('UsersService', () => {
         createdAt: new Date('2026-05-01T00:00:00.000Z'),
         deletedAt: null,
       },
-      tenant: { id: 'tenant-1', name: 'Tenant', slug: 'tenant', sector: 'dental' },
+      tenant: {
+        id: 'tenant-1',
+        name: 'Tenant',
+        slug: 'tenant',
+        sector: 'dental',
+      },
       site: { id: 'site-1', name: 'Site' },
       staffMember: expect.objectContaining({ id: 'staff-1' }),
       auditLog: [
@@ -226,7 +238,12 @@ describe('UsersService', () => {
       siteId: null,
       createdAt: new Date('2026-05-01T00:00:00.000Z'),
       deletedAt: null,
-      tenant: { id: 'tenant-1', name: 'Tenant', slug: 'tenant', sector: 'dental' },
+      tenant: {
+        id: 'tenant-1',
+        name: 'Tenant',
+        slug: 'tenant',
+        sector: 'dental',
+      },
       site: null,
     });
 
@@ -249,7 +266,9 @@ describe('UsersService', () => {
 
     txStaffFindFirst.mockResolvedValueOnce(null);
 
-    await expect(service.deleteMyData('cognito-sub-1')).resolves.toBeUndefined();
+    await expect(
+      service.deleteMyData('cognito-sub-1'),
+    ).resolves.toBeUndefined();
 
     expect(txUserUpdate).toHaveBeenCalledWith({
       where: { id: 'user-1' },

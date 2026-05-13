@@ -1,7 +1,9 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
   ServiceUnavailableException,
 } from '@nestjs/common';
@@ -21,7 +23,10 @@ import {
   UserRole,
   USER_ROLES,
 } from '../common/user-roles';
-import { CognitoAdminClient } from '../integrations/aws/cognito-admin.client';
+import {
+  CognitoAdminClient,
+  CognitoUserNotFoundError,
+} from '../integrations/aws/cognito-admin.client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type AdminUserSummary = {
@@ -68,6 +73,8 @@ type JsonActorScope =
 
 @Injectable()
 export class AdminUsersService {
+  private readonly logger = new Logger(AdminUsersService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
@@ -275,7 +282,13 @@ export class AdminUsersService {
   ): Promise<void> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
-      select: { id: true, role: true, siteId: true, deletedAt: true },
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        siteId: true,
+        deletedAt: true,
+      },
     });
 
     if (!user) {
@@ -289,6 +302,8 @@ export class AdminUsersService {
     if (user.deletedAt) {
       return;
     }
+
+    await this.disableCognitoUserIfPresent(user.username, user.id);
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -319,7 +334,13 @@ export class AdminUsersService {
   ): Promise<void> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, tenantId },
-      select: { id: true, role: true, siteId: true, deletedAt: true },
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        siteId: true,
+        deletedAt: true,
+      },
     });
 
     if (!user) {
@@ -333,6 +354,8 @@ export class AdminUsersService {
     if (!user.deletedAt) {
       return;
     }
+
+    await this.enableCognitoUserIfPresent(user.username, user.id);
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -351,6 +374,59 @@ export class AdminUsersService {
         {
           tenantId,
           userId,
+        },
+      ) as Prisma.InputJsonValue,
+    });
+  }
+
+  async deleteUser(
+    tenantId: string,
+    userId: string,
+    actor?: DbUserRequestContext,
+  ): Promise<void> {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, tenantId },
+      select: {
+        id: true,
+        username: true,
+        role: true,
+        siteId: true,
+        deletedAt: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('User not found');
+    }
+
+    this.assertRole(user.role);
+    this.assertActorCanActOnUser(actor, tenantId, user.siteId);
+    this.assertActorCanTargetRole(actor, user.role);
+
+    if (!user.deletedAt) {
+      throw new ConflictException('user must be disabled before deletion');
+    }
+
+    await this.deleteCognitoUserIfPresent(user.username, user.id);
+
+    await this.prisma.user.delete({ where: { id: user.id } });
+
+    await this.audit.record({
+      actorUserId: actor?.id,
+      tenantId,
+      action: 'user.deleted',
+      entityType: 'user',
+      entityId: userId,
+      payload: this.authorizationAuditPayload(
+        actor,
+        CAPABILITIES.USERS_DELETE,
+        {
+          tenantId,
+          userId,
+          username: user.username,
+          role: user.role,
+          siteId: user.siteId,
+          deletedAt: user.deletedAt.toISOString(),
         },
       ) as Prisma.InputJsonValue,
     });
@@ -456,6 +532,63 @@ export class AdminUsersService {
         },
       ) as Prisma.InputJsonValue,
     });
+  }
+
+  private async disableCognitoUserIfPresent(
+    username: string,
+    userId: string,
+  ): Promise<void> {
+    // Cognito admin APIs require Username; Verbilo stores that same value in User.username.
+    try {
+      await this.cognitoAdmin.adminDisableUser(username);
+    } catch (error) {
+      if (error instanceof CognitoUserNotFoundError) {
+        this.logger.warn(
+          `Cognito user ${username} not found while disabling DB user ${userId}; continuing with DB soft delete`,
+        );
+        return;
+      }
+
+      throw error;
+    }
+  }
+
+  private async enableCognitoUserIfPresent(
+    username: string,
+    userId: string,
+  ): Promise<void> {
+    // Cognito admin APIs require Username; Verbilo stores that same value in User.username.
+    try {
+      await this.cognitoAdmin.adminEnableUser(username);
+    } catch (error) {
+      if (error instanceof CognitoUserNotFoundError) {
+        this.logger.warn(
+          `Cognito user ${username} not found while enabling DB user ${userId}; continuing with DB restore`,
+        );
+        return;
+      }
+
+      throw error;
+    }
+  }
+
+  private async deleteCognitoUserIfPresent(
+    username: string,
+    userId: string,
+  ): Promise<void> {
+    // Cognito admin APIs require Username; Verbilo stores that same value in User.username.
+    try {
+      await this.cognitoAdmin.adminDeleteUser(username);
+    } catch (error) {
+      if (error instanceof CognitoUserNotFoundError) {
+        this.logger.warn(
+          `Cognito user ${username} not found while deleting DB user ${userId}; continuing with DB hard delete`,
+        );
+        return;
+      }
+
+      throw error;
+    }
   }
 
   private toSummary(user: UserWithSite): AdminUserSummary {
