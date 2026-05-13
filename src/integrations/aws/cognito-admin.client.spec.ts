@@ -108,6 +108,9 @@ describe('CognitoAdminClient', () => {
         secretAccessKey: 'secret-key',
       },
     });
+    // Default (no `suppressInviteEmail` flag passed) keeps MessageAction
+    // = SUPPRESS so Cognito does NOT email the user — that's how every
+    // existing caller behaves and we don't want to silently change it.
     expect(mockAdminCreateUserCommand).toHaveBeenCalledWith({
       UserPoolId: 'pool-id',
       Username: 's.jenkins',
@@ -130,6 +133,61 @@ describe('CognitoAdminClient', () => {
         MessageAction: 'SUPPRESS',
       },
     });
+  });
+
+  // VER-74: when callers opt into the Cognito-managed invite, the
+  // SDK must NOT receive MessageAction at all — supplying SUPPRESS
+  // (or any other value) silences the email entirely.
+  it('omits MessageAction when suppressInviteEmail is false (Cognito sends invite)', async () => {
+    const client = createClient({
+      COGNITO_USER_POOL_ID: 'pool-id',
+      AWS_REGION: 'eu-north-1',
+      AWS_ACCESS_KEY_ID: 'access-key',
+      AWS_SECRET_ACCESS_KEY: 'secret-key',
+    });
+
+    mockSend.mockResolvedValue({
+      User: { Attributes: [{ Name: 'sub', Value: 'cognito-sub' }] },
+    });
+
+    await client.adminCreateUser({
+      username: 's.jenkins',
+      email: 's.jenkins@example.com',
+      temporaryPassword: 'TempPass1!',
+      suppressInviteEmail: false,
+    });
+
+    const commandInput = mockAdminCreateUserCommand.mock.calls[0][0];
+    expect(commandInput).not.toHaveProperty('MessageAction');
+    expect(commandInput).toMatchObject({
+      UserPoolId: 'pool-id',
+      Username: 's.jenkins',
+      TemporaryPassword: 'TempPass1!',
+    });
+  });
+
+  it('keeps MessageAction=SUPPRESS when suppressInviteEmail is true explicitly', async () => {
+    const client = createClient({
+      COGNITO_USER_POOL_ID: 'pool-id',
+      AWS_REGION: 'eu-north-1',
+      AWS_ACCESS_KEY_ID: 'access-key',
+      AWS_SECRET_ACCESS_KEY: 'secret-key',
+    });
+
+    mockSend.mockResolvedValue({
+      User: { Attributes: [{ Name: 'sub', Value: 'cognito-sub' }] },
+    });
+
+    await client.adminCreateUser({
+      username: 's.jenkins',
+      email: 's.jenkins@example.com',
+      temporaryPassword: 'TempPass1!',
+      suppressInviteEmail: true,
+    });
+
+    expect(mockAdminCreateUserCommand).toHaveBeenCalledWith(
+      expect.objectContaining({ MessageAction: 'SUPPRESS' }),
+    );
   });
 
   it('maps UsernameExistsException to CognitoUserAlreadyExistsError', async () => {

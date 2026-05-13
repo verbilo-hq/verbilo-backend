@@ -9,6 +9,13 @@ type AdminCreateUserInput = {
   username: string;
   email: string;
   temporaryPassword: string;
+  // VER-74: when true, pass MessageAction=SUPPRESS so Cognito does NOT
+  // send its built-in invitation email (caller surfaces the temp
+  // password to the operator instead). When false, omit MessageAction
+  // and let Cognito email the invite directly to the user. Defaults
+  // to true to preserve existing behaviour for callers that haven't
+  // opted in.
+  suppressInviteEmail?: boolean;
 };
 
 type CognitoAttribute = {
@@ -113,6 +120,12 @@ export class CognitoAdminClient {
       return { status: 'skipped', reason: 'cognito-not-configured' };
     }
 
+    // VER-74: default to suppressing the Cognito invite email — matches
+    // the legacy behaviour where the caller surfaces the temp password
+    // to the operator manually. Set `suppressInviteEmail: false` to let
+    // Cognito email the user directly with the temp password.
+    const suppressInviteEmail = input.suppressInviteEmail ?? true;
+
     try {
       const response = await this.client.send(
         new this.AdminCreateUserCommand({
@@ -123,7 +136,10 @@ export class CognitoAdminClient {
             { Name: 'email_verified', Value: 'true' },
           ],
           TemporaryPassword: input.temporaryPassword,
-          MessageAction: 'SUPPRESS',
+          // Cognito only sends the invite email when MessageAction is
+          // omitted; supplying SUPPRESS or even RESEND in the create
+          // path silences the email entirely.
+          ...(suppressInviteEmail ? { MessageAction: 'SUPPRESS' } : {}),
         }),
       );
 
