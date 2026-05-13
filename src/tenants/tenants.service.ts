@@ -5,6 +5,9 @@ import {
   Injectable,
   Logger,
   NotFoundException,
+  PayloadTooLargeException,
+  ServiceUnavailableException,
+  UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
@@ -17,9 +20,14 @@ import {
   normalizeSlug,
 } from '../common/slug';
 import { Route53DomainsClient } from '../integrations/aws/route53.client';
+import { S3Client } from '../integrations/aws/s3.client';
 import { VercelDomainsClient } from '../integrations/vercel/vercel-domains.client';
 import { PrismaService } from '../prisma/prisma.service';
 
+const LOGO_MAX_BYTES = 2 * 1024 * 1024;
+const LOGO_CACHE_CONTROL = 'public, max-age=86400';
+const TENANT_LOGO_PUBLIC_BASE_URL =
+  'https://verbilo-tenant-logos.s3.eu-west-2.amazonaws.com/';
 const ENABLED_MODULE_PATTERN = /^[a-z][a-z0-9_-]{0,31}$/;
 const BRANDING_FIELDS = [
   'logoUrl',
@@ -53,6 +61,16 @@ export type UpdateTenantBrandingInput = Partial<
   Record<TenantBrandingField, string | null>
 >;
 
+export type TenantLogoUploadFile = {
+  buffer: Buffer;
+  size: number;
+};
+
+type LogoImageFormat = {
+  ext: 'png' | 'jpg' | 'webp' | 'svg';
+  contentType: 'image/png' | 'image/jpeg' | 'image/webp' | 'image/svg+xml';
+};
+
 @Injectable()
 export class TenantsService {
   private readonly logger = new Logger(TenantsService.name);
@@ -62,6 +80,7 @@ export class TenantsService {
     private readonly audit: AuditService,
     private readonly vercelDomains: VercelDomainsClient,
     private readonly route53Domains: Route53DomainsClient,
+    private readonly s3: S3Client,
   ) {}
 
   async createTenant(input: CreateTenantInput, actor?: DbUserRequestContext) {
@@ -134,7 +153,7 @@ export class TenantsService {
           payload: {
             hostname,
             error: message,
-          } as Prisma.InputJsonValue,
+          },
         });
       }
 
@@ -149,7 +168,7 @@ export class TenantsService {
           entityId: tenant.id,
           payload: {
             outcome: result,
-          } as Prisma.InputJsonValue,
+          },
         });
       } catch (error) {
         const hostname = this.route53Domains.hostnameForSlug(tenant.slug);
@@ -168,7 +187,7 @@ export class TenantsService {
           payload: {
             hostname,
             error: message,
-          } as Prisma.InputJsonValue,
+          },
         });
       }
 
@@ -400,6 +419,91 @@ export class TenantsService {
     return this.withTenantUrl(updatedTenant);
   }
 
+  async uploadLogo(
+    id: string,
+    file: TenantLogoUploadFile | undefined,
+    actor?: DbUserRequestContext,
+  ): Promise<{ logoUrl: string }> {
+    if (!file) {
+      throw new BadRequestException('Logo file is required');
+    }
+
+    if (file.size > LOGO_MAX_BYTES) {
+      throw new PayloadTooLargeException('Logo file must be 2 MB or smaller');
+    }
+
+    const format = this.detectLogoFormat(file.buffer);
+    if (!format) {
+      throw new UnsupportedMediaTypeException('Unsupported image format');
+    }
+
+    const existingTenant = await this.prisma.tenant.findUnique({
+      where: { id },
+      select: { id: true, logoUrl: true },
+    });
+
+    if (!existingTenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    this.assertActorCanActOnTenant(actor, id);
+
+    const previousKey = this.s3LogoKeyFromUrl(id, existingTenant.logoUrl);
+    const key = `tenants/${id}/logo-${Date.now()}.${format.ext}`;
+    const uploadResult = await this.s3.uploadObject({
+      key,
+      body: file.buffer,
+      contentType: format.contentType,
+      cacheControl: LOGO_CACHE_CONTROL,
+    });
+
+    if (uploadResult.kind === 's3-not-configured') {
+      throw new ServiceUnavailableException(
+        'Tenant logo uploads are not configured',
+      );
+    }
+
+    await this.prisma.tenant.update({
+      where: { id },
+      data: { logoUrl: uploadResult.url },
+    });
+
+    if (previousKey) {
+      try {
+        await this.s3.deleteObject({ key: previousKey });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(
+          `Failed to delete previous tenant logo ${previousKey}: ${message}`,
+        );
+      }
+    }
+
+    await this.audit.record({
+      actorUserId: actor?.id,
+      tenantId: id,
+      action: 'tenant.logo_uploaded',
+      entityType: 'tenant',
+      entityId: id,
+      payload: {
+        newKey: key,
+        previousKey,
+        sizeBytes: file.size,
+        contentType: format.contentType,
+        ...this.authorizationAuditPayload(
+          actor,
+          CAPABILITIES.TENANT_UPDATE_BRANDING,
+          {
+            tenantId: id,
+          },
+        ),
+      } as Prisma.InputJsonValue,
+    });
+
+    return { logoUrl: uploadResult.url };
+  }
+
   async deleteTenant(id: string, actor?: DbUserRequestContext): Promise<void> {
     const tenant = await this.prisma.tenant.findUnique({
       where: { id },
@@ -453,7 +557,7 @@ export class TenantsService {
         payload: {
           outcome: result,
           slug: tenant.slug,
-        } as Prisma.InputJsonValue,
+        },
       });
     } catch (error) {
       const hostname = this.route53Domains.hostnameForSlug(tenant.slug);
@@ -471,7 +575,7 @@ export class TenantsService {
           hostname,
           slug: tenant.slug,
           error: message,
-        } as Prisma.InputJsonValue,
+        },
       });
     }
 
@@ -486,7 +590,7 @@ export class TenantsService {
         payload: {
           outcome: result,
           slug: tenant.slug,
-        } as Prisma.InputJsonValue,
+        },
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unknown error';
@@ -499,7 +603,7 @@ export class TenantsService {
         action: 'tenant.domain.remove_failed',
         entityType: 'tenant',
         entityId: tenant.id,
-        payload: { slug: tenant.slug, error: message } as Prisma.InputJsonValue,
+        payload: { slug: tenant.slug, error: message },
       });
     }
   }
@@ -549,6 +653,62 @@ export class TenantsService {
     if (!canActOnTarget(actorScope, { tenantId })) {
       throw new ForbiddenException('Actor scope cannot target tenant');
     }
+  }
+
+  private detectLogoFormat(buffer: Buffer): LogoImageFormat | null {
+    if (
+      buffer.length >= 8 &&
+      buffer[0] === 0x89 &&
+      buffer[1] === 0x50 &&
+      buffer[2] === 0x4e &&
+      buffer[3] === 0x47 &&
+      buffer[4] === 0x0d &&
+      buffer[5] === 0x0a &&
+      buffer[6] === 0x1a &&
+      buffer[7] === 0x0a
+    ) {
+      return { ext: 'png', contentType: 'image/png' };
+    }
+
+    if (
+      buffer.length >= 3 &&
+      buffer[0] === 0xff &&
+      buffer[1] === 0xd8 &&
+      buffer[2] === 0xff
+    ) {
+      return { ext: 'jpg', contentType: 'image/jpeg' };
+    }
+
+    if (
+      buffer.length >= 12 &&
+      buffer.toString('ascii', 0, 4) === 'RIFF' &&
+      buffer.toString('ascii', 8, 12) === 'WEBP'
+    ) {
+      return { ext: 'webp', contentType: 'image/webp' };
+    }
+
+    const svgPrefix = buffer
+      .toString('utf8', 0, Math.min(buffer.length, 256))
+      .trimStart()
+      .toLowerCase();
+
+    if (svgPrefix.startsWith('<?xml') || svgPrefix.startsWith('<svg')) {
+      return { ext: 'svg', contentType: 'image/svg+xml' };
+    }
+
+    return null;
+  }
+
+  private s3LogoKeyFromUrl(
+    tenantId: string,
+    logoUrl: string | null,
+  ): string | null {
+    const tenantPrefix = `${TENANT_LOGO_PUBLIC_BASE_URL}tenants/${tenantId}/`;
+    if (!logoUrl?.startsWith(tenantPrefix)) {
+      return null;
+    }
+
+    return logoUrl.slice(TENANT_LOGO_PUBLIC_BASE_URL.length);
   }
 
   private authorizationAuditPayload(

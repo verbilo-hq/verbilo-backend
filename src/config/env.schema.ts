@@ -56,6 +56,10 @@ export const EnvSchema = z
     AWS_ACCESS_KEY_ID: z.string().min(1).optional(),
     AWS_SECRET_ACCESS_KEY: z.string().min(1).optional(),
 
+    // Tenant logo uploads. When unset, the S3 client is a no-op for local dev
+    // and CI; the API surfaces that as 503 for upload attempts.
+    S3_LOGOS_BUCKET: z.string().min(1).optional(),
+
     // NOTE: Also consumed in `src/instrument.ts` before Nest boots.
     SENTRY_DSN: z.string().url().optional(),
 
