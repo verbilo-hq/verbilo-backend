@@ -45,7 +45,12 @@ export class S3Client {
 
   constructor(config: ConfigService<Env, true>) {
     this.bucket = config.get('S3_LOGOS_BUCKET', { infer: true });
-    this.region = config.get('AWS_REGION', { infer: true });
+    // VER-69 hotfix: bucket lives in eu-west-2 but AWS_REGION is
+    // eu-north-1 (Cognito). Reading the wrong region made the SDK
+    // sign requests against the wrong endpoint → PermanentRedirect
+    // → 500 to the caller. S3_LOGOS_REGION defaults to eu-west-2 in
+    // env.schema.ts so Render doesn't need to set it explicitly.
+    this.region = config.get('S3_LOGOS_REGION', { infer: true });
     const accessKeyId = config.get('AWS_ACCESS_KEY_ID', { infer: true });
     const secretAccessKey = config.get('AWS_SECRET_ACCESS_KEY', {
       infer: true,

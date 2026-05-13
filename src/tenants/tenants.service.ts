@@ -11,7 +11,11 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
-import { CAPABILITIES, type Capability } from '../common/capabilities';
+import {
+  CAPABILITIES,
+  hasCapability,
+  type Capability,
+} from '../common/capabilities';
 import { type DbUserRequestContext } from '../common/request-context';
 import { canActOnTarget, resolveActorScope } from '../common/scope';
 import {
@@ -278,6 +282,19 @@ export class TenantsService {
     if (sector !== undefined) {
       hasUpdateField = true;
       if (sector !== existingTenant.sector) {
+        // VER-70: sector drives enabledModules defaults + customer-facing
+        // UI copy. Restrict edits to verbilo_super_admin so support
+        // engineers (or buggy code paths exposing the dropdown) can't
+        // accidentally flip a dental tenant to vets and orphan their
+        // modules. Other UpdateTenant fields stay open for support.
+        if (
+          !actor ||
+          !hasCapability(actor.role, CAPABILITIES.TENANT_UPDATE_SECTOR)
+        ) {
+          throw new ForbiddenException(
+            'Only verbilo_super_admin can change tenant sector',
+          );
+        }
         data.sector = sector;
         diff.sector = { from: existingTenant.sector, to: sector };
       }

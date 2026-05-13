@@ -3,6 +3,12 @@ import { type UserRole } from './user-roles';
 export const CAPABILITIES = {
   TENANT_CREATE: 'tenant.create',
   TENANT_UPDATE: 'tenant.update',
+  // VER-70: sector drives enabledModules defaults and customer-facing UI
+  // copy. Changing it after creation breaks invariants, so we gate
+  // sector edits behind a dedicated capability only verbilo_super_admin
+  // holds. Everyone else hits 403 if they try to change sector via
+  // PATCH /admin/tenants/:id.
+  TENANT_UPDATE_SECTOR: 'tenant.update_sector',
   TENANT_DELETE: 'tenant.delete',
   TENANT_UPDATE_BRANDING: 'tenant.update_branding',
   USERS_LIST: 'users.list',
