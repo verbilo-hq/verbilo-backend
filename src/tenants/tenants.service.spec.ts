@@ -502,6 +502,144 @@ describe('TenantsService', () => {
     });
   });
 
+  // VER-70: sector edits are now gated to verbilo_super_admin via a
+  // dedicated capability. Support can still touch other UpdateTenant
+  // fields; only sector trips the 403.
+  it('allows verbilo_super_admin to change tenant sector', async () => {
+    const existingTenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      archivedAt: null,
+      createdAt: new Date('2026-05-10T10:00:00.000Z'),
+    };
+    const updatedTenant = { ...existingTenant, sector: 'vets' };
+
+    tenantFindUnique.mockResolvedValue(existingTenant);
+    tenantUpdate.mockResolvedValue(updatedTenant);
+
+    await expect(
+      service.updateTenant('tenant-id', { sector: 'vets' }, actor),
+    ).resolves.toEqual({
+      ...updatedTenant,
+      url: 'https://acme-dental.verbilo.co.uk',
+    });
+
+    expect(tenantUpdate).toHaveBeenCalledWith({
+      where: { id: 'tenant-id' },
+      data: { sector: 'vets' },
+    });
+  });
+
+  it('rejects sector edits from verbilo_support with 403', async () => {
+    const supportActor: DbUserRequestContext = {
+      id: 'support-user-id',
+      cognitoId: 'support-cognito-id',
+      tenantId: null,
+      siteId: null,
+      siteIds: [],
+      role: 'verbilo_support',
+    };
+    const existingTenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      archivedAt: null,
+      createdAt: new Date('2026-05-10T10:00:00.000Z'),
+    };
+
+    tenantFindUnique.mockResolvedValue(existingTenant);
+
+    await expect(
+      service.updateTenant('tenant-id', { sector: 'vets' }, supportActor),
+    ).rejects.toBeInstanceOf(ForbiddenException);
+
+    expect(tenantUpdate).not.toHaveBeenCalled();
+  });
+
+  it('lets verbilo_support update non-sector fields without 403', async () => {
+    const supportActor: DbUserRequestContext = {
+      id: 'support-user-id',
+      cognitoId: 'support-cognito-id',
+      tenantId: null,
+      siteId: null,
+      siteIds: [],
+      role: 'verbilo_support',
+    };
+    const existingTenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      archivedAt: null,
+      createdAt: new Date('2026-05-10T10:00:00.000Z'),
+    };
+    const updatedTenant = { ...existingTenant, name: 'Acme Health' };
+
+    tenantFindUnique.mockResolvedValue(existingTenant);
+    tenantUpdate.mockResolvedValue(updatedTenant);
+
+    await expect(
+      service.updateTenant('tenant-id', { name: 'Acme Health' }, supportActor),
+    ).resolves.toEqual({
+      ...updatedTenant,
+      url: 'https://acme-dental.verbilo.co.uk',
+    });
+  });
+
+  it('treats a no-op sector echo as not a sector change (no 403)', async () => {
+    // If support sends `sector: 'dental'` and the tenant is already
+    // dental, that's not actually an edit — don't throw. Keeps the
+    // dropdown bound to existing state safe for read-only renders that
+    // still send the value back unchanged.
+    const supportActor: DbUserRequestContext = {
+      id: 'support-user-id',
+      cognitoId: 'support-cognito-id',
+      tenantId: null,
+      siteId: null,
+      siteIds: [],
+      role: 'verbilo_support',
+    };
+    const existingTenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      archivedAt: null,
+      createdAt: new Date('2026-05-10T10:00:00.000Z'),
+    };
+    const updatedTenant = { ...existingTenant, name: 'Acme Health' };
+
+    tenantFindUnique.mockResolvedValue(existingTenant);
+    tenantUpdate.mockResolvedValue(updatedTenant);
+
+    await expect(
+      service.updateTenant(
+        'tenant-id',
+        { sector: 'dental', name: 'Acme Health' },
+        supportActor,
+      ),
+    ).resolves.toEqual({
+      ...updatedTenant,
+      url: 'https://acme-dental.verbilo.co.uk',
+    });
+
+    expect(tenantUpdate).toHaveBeenCalledWith({
+      where: { id: 'tenant-id' },
+      data: { name: 'Acme Health' },
+    });
+  });
+
   it('updates tenant branding, skips empty strings, and writes the diff with authorization context', async () => {
     const createdAt = new Date('2026-05-10T10:00:00.000Z');
     const companyAdmin: DbUserRequestContext = {
