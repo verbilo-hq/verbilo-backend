@@ -8,9 +8,17 @@ import { AuditService } from '../audit/audit.service';
 import { CAPABILITIES } from '../common/capabilities';
 import { type DbUserRequestContext } from '../common/request-context';
 import type { Route53DomainsClient } from '../integrations/aws/route53.client';
+import type { S3Client } from '../integrations/aws/s3.client';
 import { VercelDomainsClient } from '../integrations/vercel/vercel-domains.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TenantsService } from './tenants.service';
+
+type TenantDeleteTransaction = {
+  auditLog: { create: jest.Mock };
+  tenant: { delete: jest.Mock };
+};
+
+type TenantDeleteTransactionCallback = (tx: TenantDeleteTransaction) => unknown;
 
 jest.mock('../integrations/aws/route53.client', () => ({
   Route53DomainsClient: jest.fn(),
@@ -31,6 +39,8 @@ describe('TenantsService', () => {
   let createTenantCname: jest.Mock;
   let removeTenantCname: jest.Mock;
   let route53HostnameForSlug: jest.Mock;
+  let uploadObject: jest.Mock;
+  let deleteObject: jest.Mock;
   const actor: DbUserRequestContext = {
     id: 'actor-user-id',
     cognitoId: 'actor-cognito-id',
@@ -46,11 +56,13 @@ describe('TenantsService', () => {
     tenantUpdate = jest.fn();
     tenantDelete = jest.fn();
     auditLogCreate = jest.fn().mockResolvedValue(undefined);
-    transaction = jest.fn(async (callback: any) =>
-      callback({
-        auditLog: { create: auditLogCreate },
-        tenant: { delete: tenantDelete },
-      }),
+    transaction = jest.fn((callback: TenantDeleteTransactionCallback) =>
+      Promise.resolve(
+        callback({
+          auditLog: { create: auditLogCreate },
+          tenant: { delete: tenantDelete },
+        }),
+      ),
     );
     auditRecord = jest.fn().mockResolvedValue(undefined);
     provisionTenantDomain = jest.fn().mockResolvedValue({
@@ -73,6 +85,12 @@ describe('TenantsService', () => {
       hostname: 'acme.verbilo.co.uk',
     });
     route53HostnameForSlug = jest.fn((slug: string) => `${slug}.verbilo.co.uk`);
+    uploadObject = jest.fn().mockResolvedValue({
+      kind: 'uploaded',
+      key: 'tenants/tenant-id/logo-123.png',
+      url: 'https://verbilo-tenant-logos.s3.eu-west-2.amazonaws.com/tenants/tenant-id/logo-123.png',
+    });
+    deleteObject = jest.fn().mockResolvedValue({ kind: 'deleted' });
 
     const prisma = {
       tenant: {
@@ -99,7 +117,18 @@ describe('TenantsService', () => {
       hostnameForSlug: route53HostnameForSlug,
     } as unknown as Route53DomainsClient;
 
-    service = new TenantsService(prisma, audit, vercelDomains, route53Domains);
+    const s3 = {
+      uploadObject,
+      deleteObject,
+    } as unknown as S3Client;
+
+    service = new TenantsService(
+      prisma,
+      audit,
+      vercelDomains,
+      route53Domains,
+      s3,
+    );
   });
 
   it('rejects invalid slugs before checking the database', async () => {
@@ -399,12 +428,13 @@ describe('TenantsService', () => {
       url: 'https://riverside-vets.verbilo.co.uk',
     });
 
-    expect(tenantCreate).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        name: 'Riverside Vets',
-        slug: 'riverside-vets',
-        sector: 'vets',
-      }),
+    const createCalls = tenantCreate.mock.calls as Array<
+      [{ data: Record<string, unknown> }]
+    >;
+    expect(createCalls[0][0].data).toMatchObject({
+      name: 'Riverside Vets',
+      slug: 'riverside-vets',
+      sector: 'vets',
     });
   });
 
