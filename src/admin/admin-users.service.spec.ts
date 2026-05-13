@@ -310,6 +310,9 @@ describe('AdminUsersService', () => {
         temporaryPassword: expect.stringMatching(
           /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12}$/,
         ),
+        // VER-74: default path suppresses the Cognito invite email
+        // — caller shows the temp password to the operator manually.
+        suppressInviteEmail: true,
       });
       expect(userCreate).toHaveBeenCalledWith({
         data: {
@@ -341,8 +344,77 @@ describe('AdminUsersService', () => {
           targetUsername: 's.jenkins',
           targetRole: 'employee',
           targetSiteId: null,
+          invitationEmailSent: false,
         },
       });
+    });
+
+    // VER-74: opt-in email-invite path.
+    it('sends a Cognito-managed invite email when sendInvitationEmail is true', async () => {
+      const result = await service.createTenantUser(
+        companyAdmin,
+        'tenant-id',
+        {
+          username: 's.jenkins',
+          displayName: 'Sam Jenkins',
+          role: 'employee',
+          email: 's.jenkins@example.com',
+          sendInvitationEmail: true,
+        },
+      );
+
+      // Response is the discriminated `invitationEmailedTo` variant —
+      // no temp password in the body. Cognito has it; operator
+      // doesn't need it.
+      expect(result).toEqual({
+        user: {
+          id: 'new-user-id',
+          username: 's.jenkins',
+          displayName: 'Sam Jenkins',
+          role: 'employee',
+          siteId: null,
+          createdAt,
+        },
+        invitationEmailedTo: 's.jenkins@example.com',
+      });
+
+      // Cognito client called with suppressInviteEmail: false so the
+      // SDK omits MessageAction and Cognito sends the welcome email.
+      expect(cognitoAdminCreateUser).toHaveBeenCalledWith(
+        expect.objectContaining({
+          username: 's.jenkins',
+          email: 's.jenkins@example.com',
+          suppressInviteEmail: false,
+        }),
+      );
+
+      // Audit log marks the row as email-invited so we can trace which
+      // onboarding path was used. Never includes the temp password.
+      expect(auditRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'user.created',
+          payload: expect.objectContaining({
+            invitationEmailSent: true,
+          }),
+        }),
+      );
+    });
+
+    it('rejects sendInvitationEmail: true with no email (400)', async () => {
+      await expect(
+        service.createTenantUser(companyAdmin, 'tenant-id', {
+          username: 's.jenkins',
+          displayName: 'Sam Jenkins',
+          role: 'employee',
+          sendInvitationEmail: true,
+          // email intentionally omitted
+        }),
+      ).rejects.toBeInstanceOf(BadRequestException);
+
+      // Should bail before any Cognito / DB writes.
+      expect(cognitoAdminCreateUser).not.toHaveBeenCalled();
+      expect(userCreate).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalled();
     });
 
     it('rejects rank escalation above the actor role', async () => {
@@ -429,6 +501,7 @@ describe('AdminUsersService', () => {
         username: 's.jenkins',
         email: 's.jenkins@smileco.placeholder.invalid',
         temporaryPassword: expect.any(String),
+        suppressInviteEmail: true,
       });
     });
 

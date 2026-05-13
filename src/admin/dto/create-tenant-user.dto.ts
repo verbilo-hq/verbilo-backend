@@ -1,4 +1,5 @@
 import {
+  IsBoolean,
   IsEmail,
   IsIn,
   IsOptional,
@@ -29,4 +30,13 @@ export class CreateTenantUserDto {
   @IsOptional()
   @IsEmail()
   email?: string;
+
+  // VER-74: when true, have Cognito email the invitation directly to
+  // the user instead of returning the temp password in the API
+  // response. Requires `email` to be set — service throws 400 if not.
+  // Defaults to false so existing callers keep getting the password
+  // back to show in the modal.
+  @IsOptional()
+  @IsBoolean()
+  sendInvitationEmail?: boolean;
 }

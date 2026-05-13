@@ -54,7 +54,20 @@ export type CreateTenantUserPayload = {
   role: UserRole;
   siteId?: string;
   email?: string;
+  // VER-74: when true, Cognito emails the invitation (with temp
+  // password + sign-in URL) directly to the user instead of the API
+  // returning the temp password to the caller. Requires `email`.
+  sendInvitationEmail?: boolean;
 };
+
+// VER-74: discriminated union for the create response. Either the
+// caller gets the temp password back to surface in the UI (legacy
+// manual-share path), OR they get a confirmation of which email
+// Cognito sent the invitation to. Never both — keeps the temp
+// password out of logs / response bodies on the email path.
+export type CreateTenantUserResult =
+  | { user: CreatedTenantUser; temporaryPassword: string }
+  | { user: CreatedTenantUser; invitationEmailedTo: string };
 
 type UserWithSite = {
   id: string;
@@ -115,9 +128,19 @@ export class AdminUsersService {
     actor: DbUserRequestContext | undefined,
     tenantId: string,
     payload: CreateTenantUserPayload,
-  ): Promise<{ user: CreatedTenantUser; temporaryPassword: string }> {
+  ): Promise<CreateTenantUserResult> {
     this.assertRole(payload.role);
     this.assertActorCanCreateTenantUser(actor, tenantId, payload.role);
+
+    // VER-74: the email-invite path requires an actual email address —
+    // Cognito will silently drop the message if we hand it the
+    // `placeholder.invalid` fallback. Fail fast with a 400 so the
+    // frontend can keep the operator on the same screen.
+    if (payload.sendInvitationEmail && !payload.email) {
+      throw new BadRequestException(
+        'An email address is required to send an invitation email',
+      );
+    }
 
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
@@ -137,10 +160,12 @@ export class AdminUsersService {
     const temporaryPassword = generateTemporaryPassword();
     const email =
       payload.email ?? `${payload.username}@${tenant.slug}.placeholder.invalid`;
+    const sendInvitationEmail = payload.sendInvitationEmail === true;
     const cognitoResult = await this.cognitoAdmin.adminCreateUser({
       username: payload.username,
       email,
       temporaryPassword,
+      suppressInviteEmail: !sendInvitationEmail,
     });
 
     if (cognitoResult.status === 'skipped') {
@@ -190,9 +215,18 @@ export class AdminUsersService {
           targetUsername: user.username,
           targetRole: user.role,
           targetSiteId: user.siteId,
+          // VER-74: trace which onboarding path was used per row.
+          // Never include the temp password itself in the audit log.
+          invitationEmailSent: sendInvitationEmail,
         },
       });
 
+      // VER-74: discriminated response. On the email path we drop the
+      // temp password from the response body entirely — Cognito has it,
+      // the user received it, the operator never needs to see it.
+      if (sendInvitationEmail && payload.email) {
+        return { user, invitationEmailedTo: payload.email };
+      }
       return { user, temporaryPassword };
     } catch (error) {
       await this.audit.record({
@@ -210,6 +244,7 @@ export class AdminUsersService {
             siteId: payload.siteId ?? null,
             email,
             tenantId,
+            invitationEmailSent: sendInvitationEmail,
           },
         },
       });
