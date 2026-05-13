@@ -60,6 +60,12 @@ export const EnvSchema = z
     // and CI; the API surfaces that as 503 for upload attempts.
     S3_LOGOS_BUCKET: z.string().min(1).optional(),
 
+    // Region of the logo bucket. Distinct from AWS_REGION (which is
+    // `eu-north-1` for Cognito); the bucket lives in `eu-west-2` to be
+    // close to UK customers + the Neon DB. Defaulted so prod doesn't
+    // need to set it explicitly.
+    S3_LOGOS_REGION: z.string().min(1).default('eu-west-2'),
+
     // NOTE: Also consumed in `src/instrument.ts` before Nest boots.
     SENTRY_DSN: z.string().url().optional(),
 
