@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
 } from '@nestjs/common';
@@ -9,6 +10,7 @@ import { type DbUserRequestContext } from '../common/request-context';
 import {
   CognitoAdminClient,
   CognitoUserAlreadyExistsError,
+  CognitoUserNotFoundError,
 } from '../integrations/aws/cognito-admin.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminUsersService } from './admin-users.service';
@@ -30,12 +32,16 @@ describe('AdminUsersService', () => {
   let userFindFirst: jest.Mock;
   let userCreate: jest.Mock;
   let userUpdate: jest.Mock;
+  let userDelete: jest.Mock;
   let siteFindFirst: jest.Mock;
   let userSiteAssignmentCreate: jest.Mock;
   let userSiteAssignmentUpsert: jest.Mock;
   let userSiteAssignmentDeleteMany: jest.Mock;
   let auditRecord: jest.Mock;
   let cognitoAdminCreateUser: jest.Mock;
+  let cognitoAdminDisableUser: jest.Mock;
+  let cognitoAdminEnableUser: jest.Mock;
+  let cognitoAdminDeleteUser: jest.Mock;
   const actor: DbUserRequestContext = {
     id: 'actor-user-id',
     cognitoId: 'actor-cognito-id',
@@ -57,6 +63,7 @@ describe('AdminUsersService', () => {
     userFindFirst = jest.fn();
     userCreate = jest.fn();
     userUpdate = jest.fn();
+    userDelete = jest.fn();
     siteFindFirst = jest.fn();
     userSiteAssignmentCreate = jest.fn();
     userSiteAssignmentUpsert = jest.fn();
@@ -66,6 +73,9 @@ describe('AdminUsersService', () => {
       status: 'created',
       cognitoSub: 'created-cognito-sub',
     });
+    cognitoAdminDisableUser = jest.fn().mockResolvedValue(undefined);
+    cognitoAdminEnableUser = jest.fn().mockResolvedValue(undefined);
+    cognitoAdminDeleteUser = jest.fn().mockResolvedValue(undefined);
 
     const prisma = {
       $transaction: prismaTransaction,
@@ -75,6 +85,7 @@ describe('AdminUsersService', () => {
         findFirst: userFindFirst,
         create: userCreate,
         update: userUpdate,
+        delete: userDelete,
       },
       site: { findFirst: siteFindFirst },
       userSiteAssignment: {
@@ -87,6 +98,9 @@ describe('AdminUsersService', () => {
     const audit = { record: auditRecord } as unknown as AuditService;
     const cognitoAdmin = {
       adminCreateUser: cognitoAdminCreateUser,
+      adminDisableUser: cognitoAdminDisableUser,
+      adminEnableUser: cognitoAdminEnableUser,
+      adminDeleteUser: cognitoAdminDeleteUser,
     } as unknown as CognitoAdminClient;
 
     service = new AdminUsersService(prisma, audit, cognitoAdmin);
@@ -143,19 +157,19 @@ describe('AdminUsersService', () => {
         },
       ]);
 
-      await expect(service.listUsers('tenant-id', companyAdmin)).resolves.toEqual(
-        [
-          {
-            id: 'user-1',
-            username: 'alice',
-            role: 'employee',
-            siteId: null,
-            siteName: null,
-            createdAt,
-            deletedAt: null,
-          },
-        ],
-      );
+      await expect(
+        service.listUsers('tenant-id', companyAdmin),
+      ).resolves.toEqual([
+        {
+          id: 'user-1',
+          username: 'alice',
+          role: 'employee',
+          siteId: null,
+          siteName: null,
+          createdAt,
+          deletedAt: null,
+        },
+      ]);
     });
 
     it('allows platform actors to list users in any tenant', async () => {
@@ -658,11 +672,13 @@ describe('AdminUsersService', () => {
 
       expect(userUpdate).not.toHaveBeenCalled();
       expect(auditRecord).not.toHaveBeenCalled();
+      expect(cognitoAdminDisableUser).not.toHaveBeenCalled();
     });
 
     it('is idempotent when the user is already disabled', async () => {
       userFindFirst.mockResolvedValue({
         id: 'user-id',
+        username: 'alice',
         role: 'employee',
         siteId: null,
         deletedAt: new Date('2026-05-10T12:00:00.000Z'),
@@ -674,11 +690,13 @@ describe('AdminUsersService', () => {
 
       expect(userUpdate).not.toHaveBeenCalled();
       expect(auditRecord).not.toHaveBeenCalled();
+      expect(cognitoAdminDisableUser).not.toHaveBeenCalled();
     });
 
-    it('sets deletedAt and writes an audit row', async () => {
+    it('disables the Cognito user, sets deletedAt, and writes an audit row', async () => {
       userFindFirst.mockResolvedValue({
         id: 'user-id',
+        username: 'alice',
         role: 'employee',
         siteId: null,
         deletedAt: null,
@@ -689,6 +707,7 @@ describe('AdminUsersService', () => {
         service.disableUser('tenant-id', 'user-id', actor),
       ).resolves.toBeUndefined();
 
+      expect(cognitoAdminDisableUser).toHaveBeenCalledWith('alice');
       expect(userUpdate).toHaveBeenCalledWith({
         where: { id: 'user-id' },
         data: { deletedAt: expect.any(Date) },
@@ -708,6 +727,49 @@ describe('AdminUsersService', () => {
         },
       });
     });
+
+    it('soft-deletes when Cognito user is already missing', async () => {
+      userFindFirst.mockResolvedValue({
+        id: 'user-id',
+        username: 'alice',
+        role: 'employee',
+        siteId: null,
+        deletedAt: null,
+      });
+      cognitoAdminDisableUser.mockRejectedValue(
+        new CognitoUserNotFoundError('alice'),
+      );
+
+      await expect(
+        service.disableUser('tenant-id', 'user-id', actor),
+      ).resolves.toBeUndefined();
+
+      expect(userUpdate).toHaveBeenCalledWith({
+        where: { id: 'user-id' },
+        data: { deletedAt: expect.any(Date) },
+      });
+      expect(auditRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'user.disabled' }),
+      );
+    });
+
+    it('does not soft-delete when Cognito disable fails unexpectedly', async () => {
+      userFindFirst.mockResolvedValue({
+        id: 'user-id',
+        username: 'alice',
+        role: 'employee',
+        siteId: null,
+        deletedAt: null,
+      });
+      cognitoAdminDisableUser.mockRejectedValue(new Error('Access denied'));
+
+      await expect(
+        service.disableUser('tenant-id', 'user-id', actor),
+      ).rejects.toThrow('Access denied');
+
+      expect(userUpdate).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalled();
+    });
   });
 
   describe('enableUser', () => {
@@ -720,11 +782,13 @@ describe('AdminUsersService', () => {
 
       expect(userUpdate).not.toHaveBeenCalled();
       expect(auditRecord).not.toHaveBeenCalled();
+      expect(cognitoAdminEnableUser).not.toHaveBeenCalled();
     });
 
     it('is idempotent when the user is already enabled', async () => {
       userFindFirst.mockResolvedValue({
         id: 'user-id',
+        username: 'alice',
         role: 'employee',
         siteId: null,
         deletedAt: null,
@@ -736,11 +800,13 @@ describe('AdminUsersService', () => {
 
       expect(userUpdate).not.toHaveBeenCalled();
       expect(auditRecord).not.toHaveBeenCalled();
+      expect(cognitoAdminEnableUser).not.toHaveBeenCalled();
     });
 
-    it('clears deletedAt and writes an audit row', async () => {
+    it('enables the Cognito user, clears deletedAt, and writes an audit row', async () => {
       userFindFirst.mockResolvedValue({
         id: 'user-id',
+        username: 'alice',
         role: 'employee',
         siteId: null,
         deletedAt: new Date('2026-05-10T12:00:00.000Z'),
@@ -751,6 +817,7 @@ describe('AdminUsersService', () => {
         service.enableUser('tenant-id', 'user-id', actor),
       ).resolves.toBeUndefined();
 
+      expect(cognitoAdminEnableUser).toHaveBeenCalledWith('alice');
       expect(userUpdate).toHaveBeenCalledWith({
         where: { id: 'user-id' },
         data: { deletedAt: null },
@@ -769,6 +836,186 @@ describe('AdminUsersService', () => {
           targetSnapshot: { tenantId: 'tenant-id', userId: 'user-id' },
         },
       });
+    });
+
+    it('restores the DB user when Cognito user is already missing', async () => {
+      userFindFirst.mockResolvedValue({
+        id: 'user-id',
+        username: 'alice',
+        role: 'employee',
+        siteId: null,
+        deletedAt: new Date('2026-05-10T12:00:00.000Z'),
+      });
+      cognitoAdminEnableUser.mockRejectedValue(
+        new CognitoUserNotFoundError('alice'),
+      );
+
+      await expect(
+        service.enableUser('tenant-id', 'user-id', actor),
+      ).resolves.toBeUndefined();
+
+      expect(userUpdate).toHaveBeenCalledWith({
+        where: { id: 'user-id' },
+        data: { deletedAt: null },
+      });
+      expect(auditRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'user.enabled' }),
+      );
+    });
+
+    it('does not restore the DB user when Cognito enable fails unexpectedly', async () => {
+      userFindFirst.mockResolvedValue({
+        id: 'user-id',
+        username: 'alice',
+        role: 'employee',
+        siteId: null,
+        deletedAt: new Date('2026-05-10T12:00:00.000Z'),
+      });
+      cognitoAdminEnableUser.mockRejectedValue(new Error('Access denied'));
+
+      await expect(
+        service.enableUser('tenant-id', 'user-id', actor),
+      ).rejects.toThrow('Access denied');
+
+      expect(userUpdate).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteUser', () => {
+    it('throws 404 when the user is missing', async () => {
+      userFindFirst.mockResolvedValue(null);
+
+      await expect(
+        service.deleteUser('tenant-id', 'missing-user-id', actor),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(cognitoAdminDeleteUser).not.toHaveBeenCalled();
+      expect(userDelete).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalled();
+    });
+
+    it('rejects users that have not been disabled first', async () => {
+      userFindFirst.mockResolvedValue({
+        id: 'user-id',
+        username: 'alice',
+        role: 'employee',
+        siteId: null,
+        deletedAt: null,
+      });
+
+      await expect(
+        service.deleteUser('tenant-id', 'user-id', actor),
+      ).rejects.toBeInstanceOf(ConflictException);
+
+      expect(cognitoAdminDeleteUser).not.toHaveBeenCalled();
+      expect(userDelete).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalled();
+    });
+
+    it('deletes the Cognito user, hard-deletes the row, and writes audit', async () => {
+      const deletedAt = new Date('2026-05-10T12:00:00.000Z');
+      userFindFirst.mockResolvedValue({
+        id: 'user-id',
+        username: 'alice',
+        role: 'employee',
+        siteId: 'site-id',
+        deletedAt,
+      });
+      userDelete.mockResolvedValue({ id: 'user-id' });
+
+      await expect(
+        service.deleteUser('tenant-id', 'user-id', actor),
+      ).resolves.toBeUndefined();
+
+      expect(cognitoAdminDeleteUser).toHaveBeenCalledWith('alice');
+      expect(userDelete).toHaveBeenCalledWith({ where: { id: 'user-id' } });
+      expect(auditRecord).toHaveBeenCalledWith({
+        actorUserId: 'actor-user-id',
+        tenantId: 'tenant-id',
+        action: 'user.deleted',
+        entityType: 'user',
+        entityId: 'user-id',
+        payload: {
+          actorRole: 'verbilo_super_admin',
+          actorScope: { kind: 'platform' },
+          capability: CAPABILITIES.USERS_DELETE,
+          targetSnapshot: {
+            tenantId: 'tenant-id',
+            userId: 'user-id',
+            username: 'alice',
+            role: 'employee',
+            siteId: 'site-id',
+            deletedAt: '2026-05-10T12:00:00.000Z',
+          },
+        },
+      });
+    });
+
+    it('hard-deletes when Cognito user is already missing', async () => {
+      userFindFirst.mockResolvedValue({
+        id: 'user-id',
+        username: 'alice',
+        role: 'employee',
+        siteId: null,
+        deletedAt: new Date('2026-05-10T12:00:00.000Z'),
+      });
+      cognitoAdminDeleteUser.mockRejectedValue(
+        new CognitoUserNotFoundError('alice'),
+      );
+
+      await expect(
+        service.deleteUser('tenant-id', 'user-id', actor),
+      ).resolves.toBeUndefined();
+
+      expect(userDelete).toHaveBeenCalledWith({ where: { id: 'user-id' } });
+      expect(auditRecord).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'user.deleted' }),
+      );
+    });
+
+    it('rejects actors outside the target user scope', async () => {
+      const companyAdmin: DbUserRequestContext = {
+        ...actor,
+        role: 'company_admin',
+        tenantId: 'tenant-b-id',
+      };
+      userFindFirst.mockResolvedValue({
+        id: 'user-id',
+        username: 'alice',
+        role: 'employee',
+        siteId: null,
+        deletedAt: new Date('2026-05-10T12:00:00.000Z'),
+      });
+
+      await expect(
+        service.deleteUser('tenant-id', 'user-id', companyAdmin),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(cognitoAdminDeleteUser).not.toHaveBeenCalled();
+      expect(userDelete).not.toHaveBeenCalled();
+    });
+
+    it('rejects actors below the target user rank', async () => {
+      const companyAdmin: DbUserRequestContext = {
+        ...actor,
+        role: 'company_admin',
+        tenantId: 'tenant-id',
+      };
+      userFindFirst.mockResolvedValue({
+        id: 'user-id',
+        username: 'owner',
+        role: 'company_owner',
+        siteId: null,
+        deletedAt: new Date('2026-05-10T12:00:00.000Z'),
+      });
+
+      await expect(
+        service.deleteUser('tenant-id', 'user-id', companyAdmin),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(cognitoAdminDeleteUser).not.toHaveBeenCalled();
+      expect(userDelete).not.toHaveBeenCalled();
     });
   });
 

@@ -39,6 +39,9 @@ describe('capabilities', () => {
     expect(
       hasCapability('verbilo_support', CAPABILITIES.USERS_ASSIGN_SITE),
     ).toBe(true);
+    expect(hasCapability('verbilo_support', CAPABILITIES.USERS_DELETE)).toBe(
+      false,
+    );
   });
 
   it('grants tenant user-management capabilities to tenant managers and owners', () => {
@@ -54,8 +57,28 @@ describe('capabilities', () => {
       expect(hasCapability(role, CAPABILITIES.USERS_CREATE)).toBe(true);
       expect(hasCapability(role, CAPABILITIES.USERS_UPDATE_ROLE)).toBe(true);
       expect(hasCapability(role, CAPABILITIES.USERS_DISABLE)).toBe(true);
+      expect(hasCapability(role, CAPABILITIES.USERS_DELETE)).toBe(true);
       expect(hasCapability(role, CAPABILITIES.USERS_RESET_PASSWORD)).toBe(true);
     }
+  });
+
+  it('grants user deletion only to destructive user-management roles', () => {
+    const roles: UserRole[] = [
+      'verbilo_super_admin',
+      'company_owner',
+      'company_admin',
+      'area_manager',
+      'practice_manager',
+    ];
+
+    for (const role of roles) {
+      expect(hasCapability(role, CAPABILITIES.USERS_DELETE)).toBe(true);
+    }
+
+    expect(hasCapability('verbilo_support', CAPABILITIES.USERS_DELETE)).toBe(
+      false,
+    );
+    expect(hasCapability('employee', CAPABILITIES.USERS_DELETE)).toBe(false);
   });
 
   it('grants site assignment only to support, tenant admins, and area managers', () => {

@@ -32,6 +32,9 @@ type CognitoSdk = {
     credentials: { accessKeyId: string; secretAccessKey: string };
   }) => CognitoIdentityProviderClientInstance;
   AdminCreateUserCommand: new (input: Record<string, unknown>) => unknown;
+  AdminDisableUserCommand: new (input: Record<string, unknown>) => unknown;
+  AdminEnableUserCommand: new (input: Record<string, unknown>) => unknown;
+  AdminDeleteUserCommand: new (input: Record<string, unknown>) => unknown;
 };
 
 export type CognitoAdminCreateUserResult =
@@ -42,6 +45,13 @@ export class CognitoUserAlreadyExistsError extends Error {
   constructor(username: string) {
     super(`Cognito user already exists: ${username}`);
     this.name = 'CognitoUserAlreadyExistsError';
+  }
+}
+
+export class CognitoUserNotFoundError extends Error {
+  constructor(username: string) {
+    super(`Cognito user not found: ${username}`);
+    this.name = 'CognitoUserNotFoundError';
   }
 }
 
@@ -59,6 +69,9 @@ export class CognitoAdminClient {
   private readonly region?: string;
   private readonly client?: CognitoIdentityProviderClientInstance;
   private readonly AdminCreateUserCommand?: CognitoSdk['AdminCreateUserCommand'];
+  private readonly AdminDisableUserCommand?: CognitoSdk['AdminDisableUserCommand'];
+  private readonly AdminEnableUserCommand?: CognitoSdk['AdminEnableUserCommand'];
+  private readonly AdminDeleteUserCommand?: CognitoSdk['AdminDeleteUserCommand'];
 
   constructor(config: ConfigService<Env, true>) {
     this.userPoolId = config.get('COGNITO_USER_POOL_ID', { infer: true });
@@ -75,6 +88,9 @@ export class CognitoAdminClient {
       }
 
       this.AdminCreateUserCommand = sdk.AdminCreateUserCommand;
+      this.AdminDisableUserCommand = sdk.AdminDisableUserCommand;
+      this.AdminEnableUserCommand = sdk.AdminEnableUserCommand;
+      this.AdminDeleteUserCommand = sdk.AdminDeleteUserCommand;
       this.client = new sdk.CognitoIdentityProviderClient({
         region: this.region,
         credentials: { accessKeyId, secretAccessKey },
@@ -127,6 +143,96 @@ export class CognitoAdminClient {
 
       if (this.isCognitoError(error, 'UsernameExistsException')) {
         throw new CognitoUserAlreadyExistsError(input.username);
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      throw new CognitoOperationError(message);
+    }
+  }
+
+  async adminDisableUser(username: string): Promise<void> {
+    if (
+      !this.userPoolId ||
+      !this.region ||
+      !this.client ||
+      !this.AdminDisableUserCommand
+    ) {
+      this.logger.log(
+        `Skipping Cognito adminDisableUser for ${username}: cognito-not-configured`,
+      );
+      return;
+    }
+
+    try {
+      await this.client.send(
+        new this.AdminDisableUserCommand({
+          UserPoolId: this.userPoolId,
+          Username: username,
+        }),
+      );
+    } catch (error) {
+      if (this.isCognitoError(error, 'UserNotFoundException')) {
+        throw new CognitoUserNotFoundError(username);
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      throw new CognitoOperationError(message);
+    }
+  }
+
+  async adminEnableUser(username: string): Promise<void> {
+    if (
+      !this.userPoolId ||
+      !this.region ||
+      !this.client ||
+      !this.AdminEnableUserCommand
+    ) {
+      this.logger.log(
+        `Skipping Cognito adminEnableUser for ${username}: cognito-not-configured`,
+      );
+      return;
+    }
+
+    try {
+      await this.client.send(
+        new this.AdminEnableUserCommand({
+          UserPoolId: this.userPoolId,
+          Username: username,
+        }),
+      );
+    } catch (error) {
+      if (this.isCognitoError(error, 'UserNotFoundException')) {
+        throw new CognitoUserNotFoundError(username);
+      }
+
+      const message = error instanceof Error ? error.message : String(error);
+      throw new CognitoOperationError(message);
+    }
+  }
+
+  async adminDeleteUser(username: string): Promise<void> {
+    if (
+      !this.userPoolId ||
+      !this.region ||
+      !this.client ||
+      !this.AdminDeleteUserCommand
+    ) {
+      this.logger.log(
+        `Skipping Cognito adminDeleteUser for ${username}: cognito-not-configured`,
+      );
+      return;
+    }
+
+    try {
+      await this.client.send(
+        new this.AdminDeleteUserCommand({
+          UserPoolId: this.userPoolId,
+          Username: username,
+        }),
+      );
+    } catch (error) {
+      if (this.isCognitoError(error, 'UserNotFoundException')) {
+        throw new CognitoUserNotFoundError(username);
       }
 
       const message = error instanceof Error ? error.message : String(error);

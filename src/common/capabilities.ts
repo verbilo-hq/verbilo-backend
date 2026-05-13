@@ -10,6 +10,7 @@ export const CAPABILITIES = {
   USERS_UPDATE_ROLE: 'users.update_role',
   USERS_ASSIGN_SITE: 'users.assign_site',
   USERS_DISABLE: 'users.disable',
+  USERS_DELETE: 'users.delete',
   USERS_RESET_PASSWORD: 'users.reset_password',
 } as const;
 
@@ -53,6 +54,7 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, ReadonlySet<Capability>>> =
       CAPABILITIES.USERS_UPDATE_ROLE,
       CAPABILITIES.USERS_ASSIGN_SITE,
       CAPABILITIES.USERS_DISABLE,
+      CAPABILITIES.USERS_DELETE,
       CAPABILITIES.USERS_RESET_PASSWORD,
     ]),
     company_admin: new Set<Capability>([
@@ -63,6 +65,7 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, ReadonlySet<Capability>>> =
       CAPABILITIES.USERS_UPDATE_ROLE,
       CAPABILITIES.USERS_ASSIGN_SITE,
       CAPABILITIES.USERS_DISABLE,
+      CAPABILITIES.USERS_DELETE,
       CAPABILITIES.USERS_RESET_PASSWORD,
     ]),
     area_manager: new Set<Capability>([
@@ -71,6 +74,7 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, ReadonlySet<Capability>>> =
       CAPABILITIES.USERS_UPDATE_ROLE,
       CAPABILITIES.USERS_ASSIGN_SITE,
       CAPABILITIES.USERS_DISABLE,
+      CAPABILITIES.USERS_DELETE,
       CAPABILITIES.USERS_RESET_PASSWORD,
     ]),
     practice_manager: new Set<Capability>([
@@ -78,6 +82,7 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, ReadonlySet<Capability>>> =
       CAPABILITIES.USERS_CREATE,
       CAPABILITIES.USERS_UPDATE_ROLE,
       CAPABILITIES.USERS_DISABLE,
+      CAPABILITIES.USERS_DELETE,
       CAPABILITIES.USERS_RESET_PASSWORD,
     ]),
     employee: new Set<Capability>(),

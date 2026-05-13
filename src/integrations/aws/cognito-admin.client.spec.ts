@@ -4,17 +4,24 @@ import {
   CognitoAdminClient,
   CognitoOperationError,
   CognitoUserAlreadyExistsError,
+  CognitoUserNotFoundError,
 } from './cognito-admin.client';
 
 const mockSend = jest.fn();
 const mockCognitoIdentityProviderClient = jest.fn(() => ({ send: mockSend }));
 const mockAdminCreateUserCommand = jest.fn((input: unknown) => ({ input }));
+const mockAdminDisableUserCommand = jest.fn((input: unknown) => ({ input }));
+const mockAdminEnableUserCommand = jest.fn((input: unknown) => ({ input }));
+const mockAdminDeleteUserCommand = jest.fn((input: unknown) => ({ input }));
 
 jest.mock(
   '@aws-sdk/client-cognito-identity-provider',
   () => ({
     CognitoIdentityProviderClient: mockCognitoIdentityProviderClient,
     AdminCreateUserCommand: mockAdminCreateUserCommand,
+    AdminDisableUserCommand: mockAdminDisableUserCommand,
+    AdminEnableUserCommand: mockAdminEnableUserCommand,
+    AdminDeleteUserCommand: mockAdminDeleteUserCommand,
   }),
   { virtual: true },
 );
@@ -24,6 +31,9 @@ describe('CognitoAdminClient', () => {
     mockSend.mockReset();
     mockCognitoIdentityProviderClient.mockClear();
     mockAdminCreateUserCommand.mockClear();
+    mockAdminDisableUserCommand.mockClear();
+    mockAdminEnableUserCommand.mockClear();
+    mockAdminDeleteUserCommand.mockClear();
   });
 
   function createClient(env: Partial<Env>) {
@@ -178,4 +188,57 @@ describe('CognitoAdminClient', () => {
       }),
     ).rejects.toBeInstanceOf(CognitoOperationError);
   });
+
+  it.each([
+    ['disable', 'adminDisableUser', mockAdminDisableUserCommand],
+    ['enable', 'adminEnableUser', mockAdminEnableUserCommand],
+    ['delete', 'adminDeleteUser', mockAdminDeleteUserCommand],
+  ] as const)(
+    'calls Admin%sUserCommand by username',
+    async (_label, method, command) => {
+      const client = createClient({
+        COGNITO_USER_POOL_ID: 'pool-id',
+        AWS_REGION: 'eu-north-1',
+        AWS_ACCESS_KEY_ID: 'access-key',
+        AWS_SECRET_ACCESS_KEY: 'secret-key',
+      });
+
+      mockSend.mockResolvedValue({});
+
+      await expect(client[method]('s.jenkins')).resolves.toBeUndefined();
+
+      expect(command).toHaveBeenCalledWith({
+        UserPoolId: 'pool-id',
+        Username: 's.jenkins',
+      });
+      expect(mockSend).toHaveBeenCalledWith({
+        input: {
+          UserPoolId: 'pool-id',
+          Username: 's.jenkins',
+        },
+      });
+    },
+  );
+
+  it.each([
+    ['disable', 'adminDisableUser'],
+    ['enable', 'adminEnableUser'],
+    ['delete', 'adminDeleteUser'],
+  ] as const)(
+    'maps Admin%sUser UserNotFoundException',
+    async (_label, method) => {
+      const client = createClient({
+        COGNITO_USER_POOL_ID: 'pool-id',
+        AWS_REGION: 'eu-north-1',
+        AWS_ACCESS_KEY_ID: 'access-key',
+        AWS_SECRET_ACCESS_KEY: 'secret-key',
+      });
+
+      mockSend.mockRejectedValue({ name: 'UserNotFoundException' });
+
+      await expect(client[method]('s.jenkins')).rejects.toBeInstanceOf(
+        CognitoUserNotFoundError,
+      );
+    },
+  );
 });

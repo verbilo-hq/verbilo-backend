@@ -30,6 +30,7 @@ describe('AdminUsersController', () => {
     updateUserRole: jest.Mock;
     disableUser: jest.Mock;
     enableUser: jest.Mock;
+    deleteUser: jest.Mock;
     assignUserSite: jest.Mock;
     unassignUserSite: jest.Mock;
   };
@@ -49,6 +50,7 @@ describe('AdminUsersController', () => {
       updateUserRole: jest.fn(),
       disableUser: jest.fn(),
       enableUser: jest.fn(),
+      deleteUser: jest.fn(),
       assignUserSite: jest.fn(),
       unassignUserSite: jest.fn(),
     };
@@ -92,6 +94,9 @@ describe('AdminUsersController', () => {
       Reflect.getMetadata(ROLES_KEY, AdminUsersController.prototype.enableUser),
     ).toBeUndefined();
     expect(
+      Reflect.getMetadata(ROLES_KEY, AdminUsersController.prototype.deleteUser),
+    ).toBeUndefined();
+    expect(
       Reflect.getMetadata(
         ROLES_KEY,
         AdminUsersController.prototype.assignUserSite,
@@ -130,6 +135,12 @@ describe('AdminUsersController', () => {
         AdminUsersController.prototype.disableUser,
       ),
     ).toBe(CAPABILITIES.USERS_DISABLE);
+    expect(
+      Reflect.getMetadata(
+        REQUIRES_CAPABILITY_KEY,
+        AdminUsersController.prototype.deleteUser,
+      ),
+    ).toBe(CAPABILITIES.USERS_DELETE);
     expect(
       Reflect.getMetadata(
         REQUIRES_CAPABILITY_KEY,
@@ -326,6 +337,34 @@ describe('AdminUsersController', () => {
       'user-id',
       actor,
     );
+  });
+
+  it('forwards deleteUser to the service with actor user id', async () => {
+    service.deleteUser.mockResolvedValue(undefined);
+
+    await expect(
+      controller.deleteUser('tenant-id', 'user-id', {
+        dbUser: actor,
+      } as any),
+    ).resolves.toBeUndefined();
+
+    expect(service.deleteUser).toHaveBeenCalledWith(
+      'tenant-id',
+      'user-id',
+      actor,
+    );
+  });
+
+  it('lets deleteUser ConflictException propagate as a 409', async () => {
+    service.deleteUser.mockRejectedValue(
+      new ConflictException('user must be disabled before deletion'),
+    );
+
+    await expect(
+      controller.deleteUser('tenant-id', 'user-id', {
+        dbUser: actor,
+      } as any),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('forwards assignUserSite to the service with actor user id', async () => {
