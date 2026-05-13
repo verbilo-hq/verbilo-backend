@@ -6,19 +6,36 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { CAPABILITIES } from '../common/capabilities';
 import { type DbUserRequestContext } from '../common/request-context';
+import {
+  CognitoAdminClient,
+  CognitoUserAlreadyExistsError,
+} from '../integrations/aws/cognito-admin.client';
 import { PrismaService } from '../prisma/prisma.service';
 import { AdminUsersService } from './admin-users.service';
+
+jest.mock(
+  '@aws-sdk/client-cognito-identity-provider',
+  () => ({
+    CognitoIdentityProviderClient: jest.fn(),
+    AdminCreateUserCommand: jest.fn(),
+  }),
+  { virtual: true },
+);
 
 describe('AdminUsersService', () => {
   let service: AdminUsersService;
   let tenantFindUnique: jest.Mock;
+  let prismaTransaction: jest.Mock;
   let userFindMany: jest.Mock;
   let userFindFirst: jest.Mock;
+  let userCreate: jest.Mock;
   let userUpdate: jest.Mock;
   let siteFindFirst: jest.Mock;
+  let userSiteAssignmentCreate: jest.Mock;
   let userSiteAssignmentUpsert: jest.Mock;
   let userSiteAssignmentDeleteMany: jest.Mock;
   let auditRecord: jest.Mock;
+  let cognitoAdminCreateUser: jest.Mock;
   const actor: DbUserRequestContext = {
     id: 'actor-user-id',
     cognitoId: 'actor-cognito-id',
@@ -30,46 +47,144 @@ describe('AdminUsersService', () => {
 
   beforeEach(() => {
     tenantFindUnique = jest.fn();
+    prismaTransaction = jest.fn(async (callback) =>
+      callback({
+        user: { create: userCreate },
+        userSiteAssignment: { create: userSiteAssignmentCreate },
+      }),
+    );
     userFindMany = jest.fn();
     userFindFirst = jest.fn();
+    userCreate = jest.fn();
     userUpdate = jest.fn();
     siteFindFirst = jest.fn();
+    userSiteAssignmentCreate = jest.fn();
     userSiteAssignmentUpsert = jest.fn();
     userSiteAssignmentDeleteMany = jest.fn();
     auditRecord = jest.fn().mockResolvedValue(undefined);
+    cognitoAdminCreateUser = jest.fn().mockResolvedValue({
+      status: 'created',
+      cognitoSub: 'created-cognito-sub',
+    });
 
     const prisma = {
+      $transaction: prismaTransaction,
       tenant: { findUnique: tenantFindUnique },
       user: {
         findMany: userFindMany,
         findFirst: userFindFirst,
+        create: userCreate,
         update: userUpdate,
       },
       site: { findFirst: siteFindFirst },
       userSiteAssignment: {
+        create: userSiteAssignmentCreate,
         upsert: userSiteAssignmentUpsert,
         deleteMany: userSiteAssignmentDeleteMany,
       },
     } as unknown as PrismaService;
 
     const audit = { record: auditRecord } as unknown as AuditService;
+    const cognitoAdmin = {
+      adminCreateUser: cognitoAdminCreateUser,
+    } as unknown as CognitoAdminClient;
 
-    service = new AdminUsersService(prisma, audit);
+    service = new AdminUsersService(prisma, audit, cognitoAdmin);
   });
 
   describe('listUsers', () => {
     it('throws 404 when the tenant does not exist', async () => {
       tenantFindUnique.mockResolvedValue(null);
 
-      await expect(service.listUsers('missing-tenant-id')).rejects.toBeInstanceOf(
-        NotFoundException,
-      );
+      await expect(
+        service.listUsers('missing-tenant-id'),
+      ).rejects.toBeInstanceOf(NotFoundException);
 
       expect(tenantFindUnique).toHaveBeenCalledWith({
         where: { id: 'missing-tenant-id' },
         select: { id: true },
       });
       expect(userFindMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects customer actors targeting another tenant', async () => {
+      const companyAdmin: DbUserRequestContext = {
+        ...actor,
+        role: 'company_admin',
+        tenantId: 'tenant-a-id',
+      };
+
+      await expect(
+        service.listUsers('tenant-b-id', companyAdmin),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(tenantFindUnique).not.toHaveBeenCalled();
+      expect(userFindMany).not.toHaveBeenCalled();
+    });
+
+    it('allows customer actors to list users in their own tenant', async () => {
+      const createdAt = new Date('2026-05-10T10:00:00.000Z');
+      const companyAdmin: DbUserRequestContext = {
+        ...actor,
+        role: 'company_admin',
+        tenantId: 'tenant-id',
+      };
+
+      tenantFindUnique.mockResolvedValue({ id: 'tenant-id' });
+      userFindMany.mockResolvedValue([
+        {
+          id: 'user-1',
+          username: 'alice',
+          role: 'employee',
+          siteId: null,
+          createdAt,
+          deletedAt: null,
+          site: null,
+        },
+      ]);
+
+      await expect(service.listUsers('tenant-id', companyAdmin)).resolves.toEqual(
+        [
+          {
+            id: 'user-1',
+            username: 'alice',
+            role: 'employee',
+            siteId: null,
+            siteName: null,
+            createdAt,
+            deletedAt: null,
+          },
+        ],
+      );
+    });
+
+    it('allows platform actors to list users in any tenant', async () => {
+      const createdAt = new Date('2026-05-10T10:00:00.000Z');
+
+      tenantFindUnique.mockResolvedValue({ id: 'tenant-b-id' });
+      userFindMany.mockResolvedValue([
+        {
+          id: 'user-1',
+          username: 'alice',
+          role: 'employee',
+          siteId: null,
+          createdAt,
+          deletedAt: null,
+          site: null,
+        },
+      ]);
+
+      await expect(service.listUsers('tenant-b-id', actor)).resolves.toEqual([
+        {
+          id: 'user-1',
+          username: 'alice',
+          role: 'employee',
+          siteId: null,
+          siteName: null,
+          createdAt,
+          deletedAt: null,
+        },
+      ]);
     });
 
     it('returns user summaries ordered by deletedAt then username', async () => {
@@ -124,6 +239,260 @@ describe('AdminUsersService', () => {
         include: { site: { select: { id: true, name: true } } },
         orderBy: [{ deletedAt: 'asc' }, { username: 'asc' }],
       });
+    });
+  });
+
+  describe('createTenantUser', () => {
+    const createdAt = new Date('2026-05-13T10:00:00.000Z');
+    const companyAdmin: DbUserRequestContext = {
+      ...actor,
+      role: 'company_admin',
+      tenantId: 'tenant-id',
+    };
+
+    beforeEach(() => {
+      tenantFindUnique.mockResolvedValue({ id: 'tenant-id', slug: 'smileco' });
+      siteFindFirst.mockResolvedValue({ id: 'site-id' });
+      userCreate.mockResolvedValue({
+        id: 'new-user-id',
+        username: 's.jenkins',
+        displayName: 'Sam Jenkins',
+        role: 'employee',
+        siteId: null,
+        createdAt,
+      });
+      userSiteAssignmentCreate.mockResolvedValue({
+        id: 'assignment-id',
+        userId: 'new-user-id',
+        siteId: 'site-id',
+      });
+    });
+
+    it('creates an employee in the actor tenant, calls Cognito, and writes audit', async () => {
+      await expect(
+        service.createTenantUser(companyAdmin, 'tenant-id', {
+          username: 's.jenkins',
+          displayName: 'Sam Jenkins',
+          role: 'employee',
+          email: 's.jenkins@example.com',
+        }),
+      ).resolves.toEqual({
+        user: {
+          id: 'new-user-id',
+          username: 's.jenkins',
+          displayName: 'Sam Jenkins',
+          role: 'employee',
+          siteId: null,
+          createdAt,
+        },
+        temporaryPassword: expect.stringMatching(
+          /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12}$/,
+        ),
+      });
+
+      expect(cognitoAdminCreateUser).toHaveBeenCalledWith({
+        username: 's.jenkins',
+        email: 's.jenkins@example.com',
+        temporaryPassword: expect.stringMatching(
+          /^(?=.*[A-Z])(?=.*[a-z])(?=.*\d)(?=.*[^A-Za-z0-9]).{12}$/,
+        ),
+      });
+      expect(userCreate).toHaveBeenCalledWith({
+        data: {
+          cognitoId: 'created-cognito-sub',
+          username: 's.jenkins',
+          displayName: 'Sam Jenkins',
+          tenantId: 'tenant-id',
+          role: 'employee',
+          siteId: undefined,
+        },
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          role: true,
+          siteId: true,
+          createdAt: true,
+        },
+      });
+      expect(userSiteAssignmentCreate).not.toHaveBeenCalled();
+      expect(auditRecord).toHaveBeenCalledWith({
+        actorUserId: 'actor-user-id',
+        tenantId: 'tenant-id',
+        action: 'user.created',
+        entityType: 'user',
+        entityId: 'new-user-id',
+        payload: {
+          targetUserId: 'new-user-id',
+          targetUsername: 's.jenkins',
+          targetRole: 'employee',
+          targetSiteId: null,
+        },
+      });
+    });
+
+    it('rejects rank escalation above the actor role', async () => {
+      const practiceManager: DbUserRequestContext = {
+        ...actor,
+        role: 'practice_manager',
+        tenantId: 'tenant-id',
+        siteId: 'site-id',
+        siteIds: ['site-id'],
+      };
+
+      await expect(
+        service.createTenantUser(practiceManager, 'tenant-id', {
+          username: 'admin.user',
+          displayName: 'Admin User',
+          role: 'company_admin',
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(cognitoAdminCreateUser).not.toHaveBeenCalled();
+      expect(userCreate).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalled();
+    });
+
+    it('rejects cross-tenant creates for non-platform actors', async () => {
+      await expect(
+        service.createTenantUser(companyAdmin, 'tenant-b-id', {
+          username: 's.jenkins',
+          displayName: 'Sam Jenkins',
+          role: 'employee',
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(cognitoAdminCreateUser).not.toHaveBeenCalled();
+      expect(userCreate).not.toHaveBeenCalled();
+    });
+
+    it('allows site-scoped actors to create users in their assigned site', async () => {
+      const practiceManager: DbUserRequestContext = {
+        ...actor,
+        role: 'practice_manager',
+        tenantId: 'tenant-id',
+        siteId: 'site-x',
+        siteIds: ['site-x'],
+      };
+
+      siteFindFirst.mockResolvedValue({ id: 'site-x' });
+      userCreate.mockResolvedValue({
+        id: 'new-user-id',
+        username: 's.jenkins',
+        displayName: 'Sam Jenkins',
+        role: 'employee',
+        siteId: 'site-x',
+        createdAt,
+      });
+
+      await expect(
+        service.createTenantUser(practiceManager, 'tenant-id', {
+          username: 's.jenkins',
+          displayName: 'Sam Jenkins',
+          role: 'employee',
+          siteId: 'site-x',
+        }),
+      ).resolves.toEqual({
+        user: {
+          id: 'new-user-id',
+          username: 's.jenkins',
+          displayName: 'Sam Jenkins',
+          role: 'employee',
+          siteId: 'site-x',
+          createdAt,
+        },
+        temporaryPassword: expect.any(String),
+      });
+
+      expect(siteFindFirst).toHaveBeenCalledWith({
+        where: { id: 'site-x', tenantId: 'tenant-id' },
+        select: { id: true },
+      });
+      expect(userSiteAssignmentCreate).toHaveBeenCalledWith({
+        data: { userId: 'new-user-id', siteId: 'site-x' },
+      });
+      expect(cognitoAdminCreateUser).toHaveBeenCalledWith({
+        username: 's.jenkins',
+        email: 's.jenkins@smileco.placeholder.invalid',
+        temporaryPassword: expect.any(String),
+      });
+    });
+
+    it('rejects site-scoped actors outside their assigned sites', async () => {
+      const practiceManager: DbUserRequestContext = {
+        ...actor,
+        role: 'practice_manager',
+        tenantId: 'tenant-id',
+        siteId: 'site-x',
+        siteIds: ['site-x'],
+      };
+
+      siteFindFirst.mockResolvedValue({ id: 'site-y' });
+
+      await expect(
+        service.createTenantUser(practiceManager, 'tenant-id', {
+          username: 's.jenkins',
+          displayName: 'Sam Jenkins',
+          role: 'employee',
+          siteId: 'site-y',
+        }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(cognitoAdminCreateUser).not.toHaveBeenCalled();
+      expect(userCreate).not.toHaveBeenCalled();
+    });
+
+    it('allows platform admins to create tenant-level admins in any tenant', async () => {
+      userCreate.mockResolvedValue({
+        id: 'new-user-id',
+        username: 'admin.user',
+        displayName: 'Admin User',
+        role: 'company_admin',
+        siteId: null,
+        createdAt,
+      });
+
+      await expect(
+        service.createTenantUser(actor, 'tenant-id', {
+          username: 'admin.user',
+          displayName: 'Admin User',
+          role: 'company_admin',
+        }),
+      ).resolves.toEqual({
+        user: {
+          id: 'new-user-id',
+          username: 'admin.user',
+          displayName: 'Admin User',
+          role: 'company_admin',
+          siteId: null,
+          createdAt,
+        },
+        temporaryPassword: expect.any(String),
+      });
+
+      expect(cognitoAdminCreateUser).toHaveBeenCalled();
+      expect(userCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ role: 'company_admin' }),
+        }),
+      );
+    });
+
+    it('propagates duplicate Cognito user errors before creating a DB user', async () => {
+      cognitoAdminCreateUser.mockRejectedValue(
+        new CognitoUserAlreadyExistsError('s.jenkins'),
+      );
+
+      await expect(
+        service.createTenantUser(companyAdmin, 'tenant-id', {
+          username: 's.jenkins',
+          displayName: 'Sam Jenkins',
+          role: 'employee',
+        }),
+      ).rejects.toBeInstanceOf(CognitoUserAlreadyExistsError);
+
+      expect(userCreate).not.toHaveBeenCalled();
+      expect(auditRecord).not.toHaveBeenCalled();
     });
   });
 
@@ -183,12 +552,7 @@ describe('AdminUsersService', () => {
       });
 
       await expect(
-        service.updateUserRole(
-          'tenant-id',
-          'user-id',
-          'company_admin',
-          actor,
-        ),
+        service.updateUserRole('tenant-id', 'user-id', 'company_admin', actor),
       ).resolves.toEqual({
         id: 'user-id',
         username: 'alice',
@@ -268,12 +632,7 @@ describe('AdminUsersService', () => {
       });
 
       await expect(
-        service.updateUserRole(
-          'tenant-id',
-          'user-id',
-          'employee',
-          actor,
-        ),
+        service.updateUserRole('tenant-id', 'user-id', 'employee', actor),
       ).resolves.toEqual({
         id: 'user-id',
         username: 'alice',
@@ -474,7 +833,12 @@ describe('AdminUsersService', () => {
       userFindFirst.mockResolvedValue(null);
 
       await expect(
-        service.assignUserSite('tenant-id', 'missing-user-id', 'site-id', actor),
+        service.assignUserSite(
+          'tenant-id',
+          'missing-user-id',
+          'site-id',
+          actor,
+        ),
       ).rejects.toBeInstanceOf(NotFoundException);
 
       expect(siteFindFirst).not.toHaveBeenCalled();
@@ -503,12 +867,7 @@ describe('AdminUsersService', () => {
       };
 
       await expect(
-        service.assignUserSite(
-          'tenant-id',
-          'user-id',
-          'site-3',
-          areaManager,
-        ),
+        service.assignUserSite('tenant-id', 'user-id', 'site-3', areaManager),
       ).rejects.toBeInstanceOf(ForbiddenException);
 
       expect(userSiteAssignmentUpsert).not.toHaveBeenCalled();
@@ -533,12 +892,7 @@ describe('AdminUsersService', () => {
       };
 
       await expect(
-        service.unassignUserSite(
-          'tenant-id',
-          'user-id',
-          'site-2',
-          areaManager,
-        ),
+        service.unassignUserSite('tenant-id', 'user-id', 'site-2', areaManager),
       ).resolves.toBeUndefined();
 
       expect(userSiteAssignmentDeleteMany).toHaveBeenCalledWith({
@@ -620,12 +974,7 @@ describe('AdminUsersService', () => {
       };
 
       await expect(
-        service.unassignUserSite(
-          'tenant-id',
-          'user-id',
-          'site-2',
-          areaManager,
-        ),
+        service.unassignUserSite('tenant-id', 'user-id', 'site-2', areaManager),
       ).rejects.toBeInstanceOf(ForbiddenException);
 
       expect(userSiteAssignmentDeleteMany).not.toHaveBeenCalled();
