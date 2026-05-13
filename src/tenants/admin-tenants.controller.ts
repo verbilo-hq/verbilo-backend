@@ -9,8 +9,11 @@ import {
   Post,
   Query,
   Req,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { Request } from 'express';
 import { CognitoJwtPayload } from '../auth/jwt.strategy';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -24,7 +27,7 @@ import { CreateTenantDto } from './dto/create-tenant.dto';
 import { TenantSlugQueryDto } from './dto/tenant-slug.dto';
 import { UpdateTenantBrandingDto } from './dto/update-tenant-branding.dto';
 import { UpdateTenantDto } from './dto/update-tenant.dto';
-import { TenantsService } from './tenants.service';
+import { TenantsService, type TenantLogoUploadFile } from './tenants.service';
 
 type AdminRequest = Request & {
   user: CognitoJwtPayload;
@@ -82,6 +85,27 @@ export class AdminTenantsController {
     @Req() request: AdminRequest,
   ) {
     return this.tenantsService.updateBranding(id, body, request.dbUser);
+  }
+
+  @Post(':id/branding/logo')
+  @RequiresCapability(CAPABILITIES.TENANT_UPDATE_BRANDING)
+  @Roles(
+    'verbilo_super_admin',
+    'verbilo_support',
+    'company_owner',
+    'company_admin',
+  )
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 2 * 1024 * 1024 },
+    }),
+  )
+  uploadLogo(
+    @Param('id') id: string,
+    @UploadedFile() file: TenantLogoUploadFile | undefined,
+    @Req() request: AdminRequest,
+  ) {
+    return this.tenantsService.uploadLogo(id, file, request.dbUser);
   }
 
   @Delete(':id')
