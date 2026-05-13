@@ -44,6 +44,20 @@ describe('capabilities', () => {
     );
   });
 
+  // VER-70: sector edits are restricted to verbilo_super_admin only.
+  it('grants TENANT_UPDATE_SECTOR only to verbilo_super_admin', () => {
+    expect(
+      hasCapability('verbilo_super_admin', CAPABILITIES.TENANT_UPDATE_SECTOR),
+    ).toBe(true);
+
+    for (const role of USER_ROLES) {
+      if (role === 'verbilo_super_admin') continue;
+      expect(hasCapability(role, CAPABILITIES.TENANT_UPDATE_SECTOR)).toBe(
+        false,
+      );
+    }
+  });
+
   it('grants tenant user-management capabilities to tenant managers and owners', () => {
     const roles: UserRole[] = [
       'company_owner',
