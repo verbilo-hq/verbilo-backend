@@ -1,16 +1,32 @@
+import { ConflictException, ServiceUnavailableException } from '@nestjs/common';
 import { plainToInstance } from 'class-transformer';
 import { validateSync } from 'class-validator';
 import { CAPABILITIES } from '../common/capabilities';
 import { REQUIRES_CAPABILITY_KEY } from '../common/requires-capability.decorator';
 import { ROLES_KEY } from '../common/roles.decorator';
+import {
+  CognitoOperationError,
+  CognitoUserAlreadyExistsError,
+} from '../integrations/aws/cognito-admin.client';
 import { AdminUsersController } from './admin-users.controller';
 import { AdminUsersService } from './admin-users.service';
+import { CreateTenantUserDto } from './dto/create-tenant-user.dto';
 import { UpdateTenantUserDto } from './dto/update-tenant-user.dto';
+
+jest.mock(
+  '@aws-sdk/client-cognito-identity-provider',
+  () => ({
+    CognitoIdentityProviderClient: jest.fn(),
+    AdminCreateUserCommand: jest.fn(),
+  }),
+  { virtual: true },
+);
 
 describe('AdminUsersController', () => {
   let controller: AdminUsersController;
   let service: {
     listUsers: jest.Mock;
+    createTenantUser: jest.Mock;
     updateUserRole: jest.Mock;
     disableUser: jest.Mock;
     enableUser: jest.Mock;
@@ -29,6 +45,7 @@ describe('AdminUsersController', () => {
   beforeEach(() => {
     service = {
       listUsers: jest.fn(),
+      createTenantUser: jest.fn(),
       updateUserRole: jest.fn(),
       disableUser: jest.fn(),
       enableUser: jest.fn(),
@@ -36,53 +53,56 @@ describe('AdminUsersController', () => {
       unassignUserSite: jest.fn(),
     };
 
-    controller = new AdminUsersController(service as unknown as AdminUsersService);
+    controller = new AdminUsersController(
+      service as unknown as AdminUsersService,
+    );
   });
 
-  it('declares read roles at the controller level', () => {
+  it('declares controller roles for every role with users capabilities', () => {
     expect(Reflect.getMetadata(ROLES_KEY, AdminUsersController)).toEqual([
       'verbilo_super_admin',
       'verbilo_support',
+      'company_owner',
+      'company_admin',
+      'area_manager',
+      'practice_manager',
     ]);
   });
 
-  it('declares write handler role restrictions', () => {
+  it('does not override controller roles on capability-gated handlers', () => {
+    expect(
+      Reflect.getMetadata(
+        ROLES_KEY,
+        AdminUsersController.prototype.createTenantUser,
+      ),
+    ).toBeUndefined();
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
         AdminUsersController.prototype.updateUserRole,
       ),
-    ).toEqual(['verbilo_super_admin']);
+    ).toBeUndefined();
     expect(
-      Reflect.getMetadata(ROLES_KEY, AdminUsersController.prototype.disableUser),
-    ).toEqual(['verbilo_super_admin']);
+      Reflect.getMetadata(
+        ROLES_KEY,
+        AdminUsersController.prototype.disableUser,
+      ),
+    ).toBeUndefined();
     expect(
       Reflect.getMetadata(ROLES_KEY, AdminUsersController.prototype.enableUser),
-    ).toEqual(['verbilo_super_admin']);
+    ).toBeUndefined();
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
         AdminUsersController.prototype.assignUserSite,
       ),
-    ).toEqual([
-      'verbilo_super_admin',
-      'verbilo_support',
-      'company_owner',
-      'company_admin',
-      'area_manager',
-    ]);
+    ).toBeUndefined();
     expect(
       Reflect.getMetadata(
         ROLES_KEY,
         AdminUsersController.prototype.unassignUserSite,
       ),
-    ).toEqual([
-      'verbilo_super_admin',
-      'verbilo_support',
-      'company_owner',
-      'company_admin',
-      'area_manager',
-    ]);
+    ).toBeUndefined();
   });
 
   it('declares capability requirements on protected handlers', () => {
@@ -92,6 +112,12 @@ describe('AdminUsersController', () => {
         AdminUsersController.prototype.listUsers,
       ),
     ).toBe(CAPABILITIES.USERS_LIST);
+    expect(
+      Reflect.getMetadata(
+        REQUIRES_CAPABILITY_KEY,
+        AdminUsersController.prototype.createTenantUser,
+      ),
+    ).toBe(CAPABILITIES.USERS_CREATE);
     expect(
       Reflect.getMetadata(
         REQUIRES_CAPABILITY_KEY,
@@ -136,14 +162,118 @@ describe('AdminUsersController', () => {
     expect(bad.length).toBeGreaterThan(0);
   });
 
-  it('forwards listUsers to the service', async () => {
+  it('validates CreateTenantUserDto shape', () => {
+    const ok = validateSync(
+      plainToInstance(CreateTenantUserDto, {
+        username: 's.jenkins_2',
+        displayName: 'Sam Jenkins',
+        role: 'employee',
+        siteId: '7da01ef1-8465-4f94-9efb-41200e7a406e',
+        email: 's.jenkins@example.com',
+      }),
+    );
+    expect(ok).toHaveLength(0);
+
+    const bad = validateSync(
+      plainToInstance(CreateTenantUserDto, {
+        username: 'Sam Jenkins',
+        displayName: '',
+        role: 'not-a-role',
+        siteId: 'not-a-uuid',
+        email: 'not-an-email',
+      }),
+    );
+    expect(bad.length).toBeGreaterThan(0);
+  });
+
+  it('forwards listUsers to the service with actor', async () => {
     service.listUsers.mockResolvedValue([{ id: 'user-id' }]);
 
-    await expect(controller.listUsers('tenant-id')).resolves.toEqual([
-      { id: 'user-id' },
-    ]);
+    await expect(
+      controller.listUsers('tenant-id', { dbUser: actor } as any),
+    ).resolves.toEqual([{ id: 'user-id' }]);
 
-    expect(service.listUsers).toHaveBeenCalledWith('tenant-id');
+    expect(service.listUsers).toHaveBeenCalledWith('tenant-id', actor);
+  });
+
+  it('lets a company_admin list users through to the service', async () => {
+    const companyAdmin = {
+      ...actor,
+      tenantId: 'tenant-id',
+      role: 'company_admin',
+    };
+    service.listUsers.mockResolvedValue([{ id: 'user-id' }]);
+
+    await expect(
+      controller.listUsers('tenant-id', { dbUser: companyAdmin } as any),
+    ).resolves.toEqual([{ id: 'user-id' }]);
+
+    expect(service.listUsers).toHaveBeenCalledWith('tenant-id', companyAdmin);
+  });
+
+  it('forwards createTenantUser to the service with actor and body', async () => {
+    service.createTenantUser.mockResolvedValue({
+      user: { id: 'user-id' },
+      temporaryPassword: 'TempPass1!',
+    });
+
+    const body = {
+      username: 's.jenkins',
+      displayName: 'Sam Jenkins',
+      role: 'employee' as const,
+      email: 's.jenkins@example.com',
+    };
+
+    await expect(
+      controller.createTenantUser('tenant-id', body, {
+        dbUser: actor,
+      } as any),
+    ).resolves.toEqual({
+      user: { id: 'user-id' },
+      temporaryPassword: 'TempPass1!',
+    });
+
+    expect(service.createTenantUser).toHaveBeenCalledWith(
+      actor,
+      'tenant-id',
+      body,
+    );
+  });
+
+  it('maps duplicate Cognito users to 409 Conflict', async () => {
+    service.createTenantUser.mockRejectedValue(
+      new CognitoUserAlreadyExistsError('s.jenkins'),
+    );
+
+    await expect(
+      controller.createTenantUser(
+        'tenant-id',
+        {
+          username: 's.jenkins',
+          displayName: 'Sam Jenkins',
+          role: 'employee',
+        },
+        { dbUser: actor } as any,
+      ),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('maps Cognito operation failures to 503 Service Unavailable', async () => {
+    service.createTenantUser.mockRejectedValue(
+      new CognitoOperationError('AccessDeniedException'),
+    );
+
+    await expect(
+      controller.createTenantUser(
+        'tenant-id',
+        {
+          username: 's.jenkins',
+          displayName: 'Sam Jenkins',
+          role: 'employee',
+        },
+        { dbUser: actor } as any,
+      ),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
   it('forwards updateUserRole to the service with actor user id', async () => {

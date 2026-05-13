@@ -27,6 +27,9 @@ describe('capabilities', () => {
     expect(hasCapability('verbilo_support', CAPABILITIES.USERS_LIST)).toBe(
       true,
     );
+    expect(hasCapability('verbilo_support', CAPABILITIES.USERS_CREATE)).toBe(
+      true,
+    );
     expect(hasCapability('verbilo_support', CAPABILITIES.TENANT_DELETE)).toBe(
       false,
     );
@@ -62,15 +65,15 @@ describe('capabilities', () => {
     expect(
       hasCapability('verbilo_support', CAPABILITIES.USERS_ASSIGN_SITE),
     ).toBe(true);
-    expect(
-      hasCapability('company_owner', CAPABILITIES.USERS_ASSIGN_SITE),
-    ).toBe(true);
-    expect(
-      hasCapability('company_admin', CAPABILITIES.USERS_ASSIGN_SITE),
-    ).toBe(true);
-    expect(
-      hasCapability('area_manager', CAPABILITIES.USERS_ASSIGN_SITE),
-    ).toBe(true);
+    expect(hasCapability('company_owner', CAPABILITIES.USERS_ASSIGN_SITE)).toBe(
+      true,
+    );
+    expect(hasCapability('company_admin', CAPABILITIES.USERS_ASSIGN_SITE)).toBe(
+      true,
+    );
+    expect(hasCapability('area_manager', CAPABILITIES.USERS_ASSIGN_SITE)).toBe(
+      true,
+    );
     expect(
       hasCapability('practice_manager', CAPABILITIES.USERS_ASSIGN_SITE),
     ).toBe(false);

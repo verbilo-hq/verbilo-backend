@@ -143,6 +143,8 @@ aws cognito-idp admin-create-user \
 
 The frontend's first login challenges them with `newPasswordRequired`, which our `SetPasswordPage` handles via `completeNewPasswordChallenge`.
 
+**VER-65**: `POST /admin/tenants/:tenantId/users` replaces the manual CLI + Prisma Studio dance for ongoing admin/Company Admin user creation — wraps `cognito-idp:AdminCreateUser` + DB row insert in one request. The CLI flow above is still the bootstrap path for the very first `verbilo_super_admin` and for emergencies.
+
 To grant a Verbilo-staff role (so the user can hit `/admin/tenants` endpoints), set `role` to `verbilo_support` or `verbilo_super_admin` on the User row.
 
 ### Where to find logs
