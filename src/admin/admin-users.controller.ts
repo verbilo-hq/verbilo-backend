@@ -115,6 +115,17 @@ export class AdminUsersController {
     return this.adminUsers.enableUser(tenantId, userId, request.dbUser);
   }
 
+  @Delete(':userId')
+  @HttpCode(204)
+  @RequiresCapability(CAPABILITIES.USERS_DELETE)
+  deleteUser(
+    @Param('id') tenantId: string,
+    @Param('userId') userId: string,
+    @Req() request: AdminRequest,
+  ): Promise<void> {
+    return this.adminUsers.deleteUser(tenantId, userId, request.dbUser);
+  }
+
   @Post(':userId/sites/:siteId')
   @HttpCode(204)
   @RequiresCapability(CAPABILITIES.USERS_ASSIGN_SITE)
