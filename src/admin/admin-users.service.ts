@@ -3,6 +3,7 @@ import {
   ForbiddenException,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { AuditService } from '../audit/audit.service';
@@ -13,7 +14,14 @@ import {
 } from '../common/capabilities';
 import { type DbUserRequestContext } from '../common/request-context';
 import { canActOnTarget, resolveActorScope } from '../common/scope';
-import { isUserRole, UserRole, USER_ROLES } from '../common/user-roles';
+import { generateTemporaryPassword } from '../common/temporary-password';
+import {
+  isUserRole,
+  PLATFORM_ROLES,
+  UserRole,
+  USER_ROLES,
+} from '../common/user-roles';
+import { CognitoAdminClient } from '../integrations/aws/cognito-admin.client';
 import { PrismaService } from '../prisma/prisma.service';
 
 export type AdminUserSummary = {
@@ -24,6 +32,23 @@ export type AdminUserSummary = {
   siteName: string | null;
   createdAt: Date;
   deletedAt: Date | null;
+};
+
+export type CreatedTenantUser = {
+  id: string;
+  username: string;
+  displayName: string;
+  role: string;
+  siteId: string | null;
+  createdAt: Date;
+};
+
+export type CreateTenantUserPayload = {
+  username: string;
+  displayName: string;
+  role: UserRole;
+  siteId?: string;
+  email?: string;
 };
 
 type UserWithSite = {
@@ -46,9 +71,21 @@ export class AdminUsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly cognitoAdmin: CognitoAdminClient,
   ) {}
 
-  async listUsers(tenantId: string): Promise<AdminUserSummary[]> {
+  async listUsers(
+    tenantId: string,
+    actor?: DbUserRequestContext,
+  ): Promise<AdminUserSummary[]> {
+    if (
+      actor &&
+      !PLATFORM_ROLES.has(actor.role) &&
+      actor.tenantId !== tenantId
+    ) {
+      throw new ForbiddenException('Actor scope cannot target tenant');
+    }
+
     const tenant = await this.prisma.tenant.findUnique({
       where: { id: tenantId },
       select: { id: true },
@@ -65,6 +102,113 @@ export class AdminUsersService {
     });
 
     return users.map((user) => this.toSummary(user));
+  }
+
+  async createTenantUser(
+    actor: DbUserRequestContext | undefined,
+    tenantId: string,
+    payload: CreateTenantUserPayload,
+  ): Promise<{ user: CreatedTenantUser; temporaryPassword: string }> {
+    this.assertRole(payload.role);
+    this.assertActorCanCreateTenantUser(actor, tenantId, payload.role);
+
+    const tenant = await this.prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true, slug: true },
+    });
+
+    if (!tenant) {
+      throw new NotFoundException('Tenant not found');
+    }
+
+    if (payload.siteId) {
+      await this.assertSiteCanBeAssigned(actor, tenantId, payload.siteId);
+    } else {
+      this.assertActorCanActOnUser(actor, tenantId, null);
+    }
+
+    const temporaryPassword = generateTemporaryPassword();
+    const email =
+      payload.email ?? `${payload.username}@${tenant.slug}.placeholder.invalid`;
+    const cognitoResult = await this.cognitoAdmin.adminCreateUser({
+      username: payload.username,
+      email,
+      temporaryPassword,
+    });
+
+    if (cognitoResult.status === 'skipped') {
+      throw new ServiceUnavailableException(
+        'Cognito user creation is not configured for this environment',
+      );
+    }
+
+    try {
+      const user = await this.prisma.$transaction(async (tx) => {
+        const createdUser = await tx.user.create({
+          data: {
+            cognitoId: cognitoResult.cognitoSub,
+            username: payload.username,
+            displayName: payload.displayName,
+            tenantId,
+            role: payload.role,
+            siteId: payload.siteId,
+          },
+          select: {
+            id: true,
+            username: true,
+            displayName: true,
+            role: true,
+            siteId: true,
+            createdAt: true,
+          },
+        });
+
+        if (payload.siteId) {
+          await tx.userSiteAssignment.create({
+            data: { userId: createdUser.id, siteId: payload.siteId },
+          });
+        }
+
+        return createdUser;
+      });
+
+      await this.audit.record({
+        actorUserId: actor?.id,
+        tenantId,
+        action: 'user.created',
+        entityType: 'user',
+        entityId: user.id,
+        payload: {
+          targetUserId: user.id,
+          targetUsername: user.username,
+          targetRole: user.role,
+          targetSiteId: user.siteId,
+        },
+      });
+
+      return { user, temporaryPassword };
+    } catch (error) {
+      await this.audit.record({
+        actorUserId: actor?.id,
+        tenantId,
+        action: 'user.cognito_orphan',
+        entityType: 'user',
+        entityId: cognitoResult.cognitoSub,
+        payload: {
+          cognitoSub: cognitoResult.cognitoSub,
+          intendedPayload: {
+            username: payload.username,
+            displayName: payload.displayName,
+            role: payload.role,
+            siteId: payload.siteId ?? null,
+            email,
+            tenantId,
+          },
+        },
+      });
+
+      throw error;
+    }
   }
 
   async updateUserRole(
@@ -157,10 +301,14 @@ export class AdminUsersService {
       action: 'user.disabled',
       entityType: 'user',
       entityId: userId,
-      payload: this.authorizationAuditPayload(actor, CAPABILITIES.USERS_DISABLE, {
-        tenantId,
-        userId,
-      }) as Prisma.InputJsonValue,
+      payload: this.authorizationAuditPayload(
+        actor,
+        CAPABILITIES.USERS_DISABLE,
+        {
+          tenantId,
+          userId,
+        },
+      ) as Prisma.InputJsonValue,
     });
   }
 
@@ -197,10 +345,14 @@ export class AdminUsersService {
       action: 'user.enabled',
       entityType: 'user',
       entityId: userId,
-      payload: this.authorizationAuditPayload(actor, CAPABILITIES.USERS_DISABLE, {
-        tenantId,
-        userId,
-      }) as Prisma.InputJsonValue,
+      payload: this.authorizationAuditPayload(
+        actor,
+        CAPABILITIES.USERS_DISABLE,
+        {
+          tenantId,
+          userId,
+        },
+      ) as Prisma.InputJsonValue,
     });
   }
 
@@ -364,6 +516,52 @@ export class AdminUsersService {
     }
   }
 
+  private assertActorCanCreateTenantUser(
+    actor: DbUserRequestContext | undefined,
+    tenantId: string,
+    role: UserRole,
+  ) {
+    if (!actor) {
+      throw new ForbiddenException('Actor unresolved');
+    }
+
+    if (PLATFORM_ROLES.has(role)) {
+      throw new ForbiddenException('Platform roles must be created manually');
+    }
+
+    const actorScope = resolveActorScope(actor);
+    if (!actorScope) {
+      throw new ForbiddenException('Actor scope unresolved');
+    }
+
+    if (actorScope.kind !== 'platform' && actorScope.tenantId !== tenantId) {
+      throw new ForbiddenException('Actor scope cannot target tenant');
+    }
+
+    if (!roleRanksAtOrAbove(actor.role, role)) {
+      throw new ForbiddenException(
+        `Role ${actor.role} cannot create role ${role}`,
+      );
+    }
+  }
+
+  private async assertSiteCanBeAssigned(
+    actor: DbUserRequestContext | undefined,
+    tenantId: string,
+    siteId: string,
+  ) {
+    const site = await this.prisma.site.findFirst({
+      where: { id: siteId, tenantId },
+      select: { id: true },
+    });
+
+    if (!site) {
+      throw new NotFoundException('Site not found');
+    }
+
+    this.assertActorCanActOnSite(actor, tenantId, siteId);
+  }
+
   private assertActorCanTargetRole(
     actor: DbUserRequestContext | undefined,
     role: UserRole,
@@ -386,7 +584,9 @@ export class AdminUsersService {
   ) {
     return {
       ...(actor ? { actorRole: actor.role } : {}),
-      actorScope: actor ? this.toJsonActorScope(resolveActorScope(actor)) : null,
+      actorScope: actor
+        ? this.toJsonActorScope(resolveActorScope(actor))
+        : null,
       capability,
       targetSnapshot,
     };
