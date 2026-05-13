@@ -36,7 +36,7 @@ describe('S3Client', () => {
   it('uploads an object and returns the public URL', async () => {
     const client = createClient({
       S3_LOGOS_BUCKET: 'verbilo-tenant-logos',
-      AWS_REGION: 'eu-west-2',
+      S3_LOGOS_REGION: 'eu-west-2',
       AWS_ACCESS_KEY_ID: 'access-key',
       AWS_SECRET_ACCESS_KEY: 'secret-key',
     });
@@ -84,7 +84,7 @@ describe('S3Client', () => {
 
   it('skips uploads when the logos bucket is unset', async () => {
     const client = createClient({
-      AWS_REGION: 'eu-west-2',
+      S3_LOGOS_REGION: 'eu-west-2',
       AWS_ACCESS_KEY_ID: 'access-key',
       AWS_SECRET_ACCESS_KEY: 'secret-key',
     });
@@ -105,7 +105,7 @@ describe('S3Client', () => {
   it('wraps upload errors as S3OperationError', async () => {
     const client = createClient({
       S3_LOGOS_BUCKET: 'verbilo-tenant-logos',
-      AWS_REGION: 'eu-west-2',
+      S3_LOGOS_REGION: 'eu-west-2',
       AWS_ACCESS_KEY_ID: 'access-key',
       AWS_SECRET_ACCESS_KEY: 'secret-key',
     });
@@ -124,7 +124,7 @@ describe('S3Client', () => {
   it('deletes an object when configured', async () => {
     const client = createClient({
       S3_LOGOS_BUCKET: 'verbilo-tenant-logos',
-      AWS_REGION: 'eu-west-2',
+      S3_LOGOS_REGION: 'eu-west-2',
       AWS_ACCESS_KEY_ID: 'access-key',
       AWS_SECRET_ACCESS_KEY: 'secret-key',
     });
@@ -144,7 +144,7 @@ describe('S3Client', () => {
   it('maps missing S3 keys to not-found', async () => {
     const client = createClient({
       S3_LOGOS_BUCKET: 'verbilo-tenant-logos',
-      AWS_REGION: 'eu-west-2',
+      S3_LOGOS_REGION: 'eu-west-2',
       AWS_ACCESS_KEY_ID: 'access-key',
       AWS_SECRET_ACCESS_KEY: 'secret-key',
     });
