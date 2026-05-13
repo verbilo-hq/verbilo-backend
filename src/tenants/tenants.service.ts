@@ -23,6 +23,10 @@ import {
   isValidSlug,
   normalizeSlug,
 } from '../common/slug';
+import {
+  CognitoAdminClient,
+  CognitoUserNotFoundError,
+} from '../integrations/aws/cognito-admin.client';
 import { Route53DomainsClient } from '../integrations/aws/route53.client';
 import { S3Client } from '../integrations/aws/s3.client';
 import { VercelDomainsClient } from '../integrations/vercel/vercel-domains.client';
@@ -85,6 +89,10 @@ export class TenantsService {
     private readonly vercelDomains: VercelDomainsClient,
     private readonly route53Domains: Route53DomainsClient,
     private readonly s3: S3Client,
+    // VER-76: tenant delete now also tears down Cognito accounts for
+    // the tenant's users. Same client we use to create them on the
+    // way in.
+    private readonly cognitoAdmin: CognitoAdminClient,
   ) {}
 
   async createTenant(input: CreateTenantInput, actor?: DbUserRequestContext) {
@@ -530,6 +538,16 @@ export class TenantsService {
       throw new NotFoundException('Tenant not found');
     }
 
+    // VER-76: snapshot Cognito usernames before the cascade removes
+    // the User rows — we need them to call AdminDeleteUser after the
+    // DB commit. Customer users only; platform admins are tenantId=null
+    // and aren't touched by this delete.
+    const tenantUsers = await this.prisma.user.findMany({
+      where: { tenantId: id },
+      select: { username: true },
+    });
+    const cognitoUsernames = tenantUsers.map((u) => u.username);
+
     const snapshot = {
       id: tenant.id,
       slug: tenant.slug,
@@ -549,6 +567,11 @@ export class TenantsService {
           entityId: tenant.id,
           payloadJson: {
             snapshot,
+            // VER-76: capture the cohort of Cognito usernames we'll
+            // attempt to clean up below. Persisted before the cleanup
+            // tries to run so we have a trail even if the process
+            // crashes mid-iteration.
+            cognitoUsernames,
             ...this.authorizationAuditPayload(
               actor,
               CAPABILITIES.TENANT_DELETE,
@@ -562,6 +585,42 @@ export class TenantsService {
 
       await tx.tenant.delete({ where: { id } });
     });
+
+    // VER-76: best-effort Cognito cleanup for each of the tenant's
+    // customer users. Same pattern as the Vercel + Route53 cleanups
+    // below — never throw, since the DB delete has already committed
+    // and a failure here would lie about what happened to the caller.
+    for (const username of cognitoUsernames) {
+      try {
+        await this.cognitoAdmin.adminDeleteUser(username);
+        await this.audit.record({
+          actorUserId: actor?.id,
+          action: 'tenant.user.cognito_deleted',
+          entityType: 'user',
+          entityId: username,
+          payload: { username, tenantId: tenant.id },
+        });
+      } catch (error) {
+        // Idempotent: if the Cognito row was already gone (e.g. the
+        // user was hard-deleted in a prior session) treat it as a
+        // no-op and stay quiet in the audit log.
+        if (error instanceof CognitoUserNotFoundError) {
+          continue;
+        }
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(
+          `Cognito delete failed for ${username} during tenant delete: ${message}`,
+        );
+        await this.audit.record({
+          actorUserId: actor?.id,
+          action: 'tenant.user.cognito_delete_failed',
+          entityType: 'user',
+          entityId: username,
+          payload: { username, tenantId: tenant.id, error: message },
+        });
+      }
+    }
 
     try {
       const result = await this.route53Domains.removeTenantCname(tenant.slug);
