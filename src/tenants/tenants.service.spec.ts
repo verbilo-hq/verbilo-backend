@@ -7,6 +7,10 @@ import {
 import { AuditService } from '../audit/audit.service';
 import { CAPABILITIES } from '../common/capabilities';
 import { type DbUserRequestContext } from '../common/request-context';
+import {
+  type CognitoAdminClient,
+  CognitoUserNotFoundError,
+} from '../integrations/aws/cognito-admin.client';
 import type { Route53DomainsClient } from '../integrations/aws/route53.client';
 import type { S3Client } from '../integrations/aws/s3.client';
 import { VercelDomainsClient } from '../integrations/vercel/vercel-domains.client';
@@ -41,6 +45,10 @@ describe('TenantsService', () => {
   let route53HostnameForSlug: jest.Mock;
   let uploadObject: jest.Mock;
   let deleteObject: jest.Mock;
+  // VER-76: tenant delete also iterates Cognito users; mock both the
+  // tenant-user lookup and the Cognito AdminDeleteUser call.
+  let userFindMany: jest.Mock;
+  let cognitoAdminDeleteUser: jest.Mock;
   const actor: DbUserRequestContext = {
     id: 'actor-user-id',
     cognitoId: 'actor-cognito-id',
@@ -91,12 +99,23 @@ describe('TenantsService', () => {
       url: 'https://verbilo-tenant-logos.s3.eu-west-2.amazonaws.com/tenants/tenant-id/logo-123.png',
     });
     deleteObject = jest.fn().mockResolvedValue({ kind: 'deleted' });
+    // VER-76: default to "no users to clean up" so legacy delete tests
+    // that didn't model users still pass without explicit setup.
+    userFindMany = jest.fn().mockResolvedValue([]);
+    cognitoAdminDeleteUser = jest.fn().mockResolvedValue(undefined);
 
     const prisma = {
       tenant: {
         findUnique: tenantFindUnique,
         create: tenantCreate,
         update: tenantUpdate,
+      },
+      // VER-76: deleteTenant snapshots tenant.user usernames so it can
+      // tear down the matching Cognito accounts after the transaction.
+      // Default the mock to "no users" so tests that don't care about
+      // this don't need to set it up.
+      user: {
+        findMany: userFindMany,
       },
       $transaction: transaction,
     } as unknown as PrismaService;
@@ -122,12 +141,20 @@ describe('TenantsService', () => {
       deleteObject,
     } as unknown as S3Client;
 
+    // VER-76: AdminDeleteUser is called once per tenant user during
+    // deleteTenant. Default to a clean resolve so the common-case
+    // "delete tenant with no users" tests stay terse.
+    const cognitoAdmin = {
+      adminDeleteUser: cognitoAdminDeleteUser,
+    } as unknown as CognitoAdminClient;
+
     service = new TenantsService(
       prisma,
       audit,
       vercelDomains,
       route53Domains,
       s3,
+      cognitoAdmin,
     );
   });
 
@@ -878,6 +905,8 @@ describe('TenantsService', () => {
             enabledModules: ['documents'],
             createdAt,
           },
+          // VER-76: empty array when the tenant has no customer users.
+          cognitoUsernames: [],
           actorRole: 'verbilo_super_admin',
           actorScope: { kind: 'platform' },
           capability: CAPABILITIES.TENANT_DELETE,
@@ -999,5 +1028,135 @@ describe('TenantsService', () => {
       }),
     );
     expect(removeTenantDomain).toHaveBeenCalledWith('acme-dental');
+  });
+
+  // VER-76: tenant delete cascades into Cognito for each customer user
+  // (best-effort, like Vercel + Route53).
+  it('deletes Cognito accounts for each tenant user during tenant delete', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const tenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      archivedAt: null,
+      createdAt,
+    };
+
+    tenantFindUnique.mockResolvedValue(tenant);
+    tenantDelete.mockResolvedValue(tenant);
+    userFindMany.mockResolvedValue([
+      { username: 's.jenkins' },
+      { username: 'a.kumar' },
+      { username: 'm.lee' },
+    ]);
+
+    await expect(
+      service.deleteTenant('tenant-id', actor),
+    ).resolves.toBeUndefined();
+
+    // One AdminDeleteUser call per snapshot row.
+    expect(cognitoAdminDeleteUser).toHaveBeenCalledTimes(3);
+    expect(cognitoAdminDeleteUser).toHaveBeenCalledWith('s.jenkins');
+    expect(cognitoAdminDeleteUser).toHaveBeenCalledWith('a.kumar');
+    expect(cognitoAdminDeleteUser).toHaveBeenCalledWith('m.lee');
+
+    // Each success → an audit row with `tenant.user.cognito_deleted`.
+    for (const username of ['s.jenkins', 'a.kumar', 'm.lee']) {
+      expect(auditRecord).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'tenant.user.cognito_deleted',
+          payload: expect.objectContaining({ username }),
+        }),
+      );
+    }
+
+    // tenant.deleted audit payload includes the cohort snapshot so we
+    // can reconstruct what was cleaned even if the per-row audits get
+    // truncated.
+    expect(auditLogCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          payloadJson: expect.objectContaining({
+            cognitoUsernames: ['s.jenkins', 'a.kumar', 'm.lee'],
+          }),
+        }),
+      }),
+    );
+  });
+
+  it('logs a cognito_delete_failed audit row when Cognito errors during tenant delete', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const tenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      archivedAt: null,
+      createdAt,
+    };
+
+    tenantFindUnique.mockResolvedValue(tenant);
+    tenantDelete.mockResolvedValue(tenant);
+    userFindMany.mockResolvedValue([{ username: 's.jenkins' }]);
+    cognitoAdminDeleteUser.mockRejectedValue(new Error('AccessDenied'));
+
+    // Tenant delete still resolves — DB already committed, this
+    // cleanup is best-effort.
+    await expect(
+      service.deleteTenant('tenant-id', actor),
+    ).resolves.toBeUndefined();
+
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'tenant.user.cognito_delete_failed',
+        payload: expect.objectContaining({
+          username: 's.jenkins',
+          error: 'AccessDenied',
+        }),
+      }),
+    );
+  });
+
+  it('treats UserNotFoundException as an idempotent no-op (no audit noise)', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const tenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      archivedAt: null,
+      createdAt,
+    };
+
+    tenantFindUnique.mockResolvedValue(tenant);
+    tenantDelete.mockResolvedValue(tenant);
+    userFindMany.mockResolvedValue([{ username: 'ghost' }]);
+    cognitoAdminDeleteUser.mockRejectedValue(
+      new CognitoUserNotFoundError('ghost'),
+    );
+
+    await expect(
+      service.deleteTenant('tenant-id', actor),
+    ).resolves.toBeUndefined();
+
+    // No success audit (we never reached the success branch) AND no
+    // failure audit (UserNotFoundException is idempotent).
+    expect(auditRecord).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'tenant.user.cognito_deleted',
+      }),
+    );
+    expect(auditRecord).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'tenant.user.cognito_delete_failed',
+      }),
+    );
   });
 });
