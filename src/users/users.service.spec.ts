@@ -91,6 +91,7 @@ describe('UsersService', () => {
       ).resolves.toEqual({
         role: 'company_admin',
         capabilities: [
+          'audit.read',
           'tenant.update',
           'tenant.update_branding',
           'users.assign_site',
