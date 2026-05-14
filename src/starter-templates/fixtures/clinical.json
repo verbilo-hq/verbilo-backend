@@ -1,0 +1,171 @@
+{
+  "default": [
+    {
+      "id": "medical-history-protocol",
+      "title": "Medical history update protocol",
+      "summary": "A starter process for collecting, reviewing, and recording medical history updates before care is delivered.",
+      "body": "## Purpose\n\nUse this protocol to keep patient medical histories current before assessment, treatment, or advice. The aim is to make sure clinicians have a reliable view of conditions, medicines, allergies, pregnancy status, and any changes that could affect safe care.\n\n## Suggested process\n\nAsk patients to confirm their history at registration, before planned treatment, and whenever they report a change. Clinical staff should review updates, clarify anything unclear, and record the outcome in the clinical system before care starts.\n\n## Checklist\n\n- Confirm current medicines, allergies, and adverse reactions.\n- Ask about recent hospital attendance, new diagnoses, or changes in symptoms.\n- Record the staff member who reviewed the update.\n- Escalate urgent or clinically significant changes to the responsible clinician.\n- Document if the patient reports no changes.",
+      "status": "template"
+    },
+    {
+      "id": "consent-form-template",
+      "title": "Consent form template",
+      "summary": "A practical consent note structure covering options, risks, benefits, and patient questions.",
+      "body": "## Consent discussion\n\nThis template is for recording the conversation that supports consent. It should be adapted to the procedure or care decision and used alongside any sector-specific consent forms already approved by the organisation.\n\n## Record the following\n\nDescribe the proposed care in plain language, why it is being recommended, and what alternatives were discussed. Include material risks, likely benefits, expected recovery or aftercare, and what may happen if the patient chooses no treatment or a different option.\n\n## Checklist\n\n- Patient had time to ask questions.\n- Benefits and common or serious risks were explained.\n- Reasonable alternatives were discussed.\n- Costs, follow-up, and aftercare were explained where relevant.\n- Patient decision and any supporting information provided were recorded.",
+      "status": "template"
+    },
+    {
+      "id": "safeguarding-pathway",
+      "title": "Safeguarding escalation pathway",
+      "summary": "A starter pathway for recognising concerns, recording facts, and escalating to the right safeguarding lead.",
+      "body": "## When to use this pathway\n\nUse this pathway when a patient, service user, child, or vulnerable adult may be at risk of harm, neglect, exploitation, or abuse. Staff should act on concerns even where information is incomplete.\n\n## Immediate actions\n\nIf there is immediate danger, call emergency services and inform the senior person on duty. If there is no immediate danger, record the concern factually, preserve relevant information, and contact the named safeguarding lead before the end of the working day.\n\n## Checklist\n\n- Record what was seen, heard, or disclosed using the person's own words where possible.\n- Do not investigate beyond what is needed to keep people safe.\n- Share information only with staff who need to know.\n- Follow local authority or NHS safeguarding referral routes.\n- Document decisions, referrals, and follow-up responsibilities.",
+      "status": "template"
+    },
+    {
+      "id": "infection-control-guidance",
+      "title": "Infection prevention & control guidance",
+      "summary": "A concise starter guide for routine infection prevention controls in a healthcare workplace.",
+      "body": "## Core standard\n\nAll staff are responsible for reducing avoidable infection risk. This guidance should be adapted to local clinical activity, estate layout, and any sector-specific infection prevention requirements.\n\n## Routine controls\n\nApply standard precautions for every patient or service user. Keep clinical and shared areas visibly clean, follow hand hygiene expectations, use PPE according to task risk, and clean reusable equipment between uses.\n\n## Checklist\n\n- Hand hygiene facilities and supplies are available.\n- Staff know when gloves, aprons, masks, or eye protection are required.\n- Cleaning schedules identify owner, frequency, and sign-off.\n- Sharps, clinical waste, and laundry are handled through approved routes.\n- Incidents, exposure events, and outbreaks are escalated promptly.\n- Audit findings are reviewed and actions tracked.",
+      "status": "template"
+    },
+    {
+      "id": "referral-pathway-template",
+      "title": "Referral pathway template",
+      "summary": "A reusable structure for documenting when and how patients are referred to external services.",
+      "body": "## Referral criteria\n\nUse this template to define when staff should refer a patient or service user to another professional, service, or urgent pathway. Keep the criteria simple enough for frontline teams to apply consistently.\n\n## Referral process\n\nDescribe what information must be gathered, who can make the referral, how urgent referrals are handled, and how the outcome is tracked. Include the expected communication back to the patient and any safety-netting advice.\n\n## Checklist\n\n- Referral criteria and exclusions are clear.\n- Required observations, history, documents, or images are listed.\n- Urgent and routine routes are separated.\n- Patient consent and information-sharing requirements are documented.\n- Follow-up owner and review timeframe are recorded.",
+      "status": "template"
+    }
+  ],
+  "dental": [
+    {
+      "id": "medical-history-protocol",
+      "title": "Medical history update protocol",
+      "summary": "A starter process for collecting, reviewing, and recording dental medical history updates before care is delivered.",
+      "body": "## Purpose\n\nUse this protocol to keep dental medical histories current before assessment, treatment, or prescribing. The aim is to make sure the clinician has a reliable view of medicines, allergies, bleeding risk, pregnancy status, bisphosphonate use, medical alerts, and conditions that may affect dental care.\n\n## Suggested process\n\nAsk patients to confirm their history at each course of treatment and before invasive or urgent care. The treating clinician should review changes, clarify anything unclear, and record the outcome in the clinical notes before treatment starts.\n\n## Checklist\n\n- Confirm medicines, allergies, anticoagulants, and adverse reactions.\n- Ask about recent hospital attendance, new diagnoses, or changes in symptoms.\n- Check alerts relevant to local anaesthetic, antibiotics, sedation, or extraction.\n- Escalate clinically significant changes to the treating dentist.\n- Document if the patient reports no changes.",
+      "status": "template"
+    },
+    {
+      "id": "consent-form-template",
+      "title": "Consent form template",
+      "summary": "A practical dental consent note structure covering options, risks, benefits, and patient questions.",
+      "body": "## Consent discussion\n\nThis template is for recording dental consent conversations. It should be adapted to the procedure and used alongside any approved practice forms for extraction, endodontics, implants, orthodontics, whitening, or sedation.\n\n## Record the following\n\nDescribe the proposed treatment in plain language, why it is being recommended, and what alternatives were discussed. Include material risks, likely benefits, expected aftercare, costs, and what may happen if the patient chooses no treatment.\n\n## Checklist\n\n- Diagnosis and treatment options were explained.\n- Common and serious risks were discussed.\n- Costs, appointments, and aftercare were explained.\n- Patient had time to ask questions.\n- Radiographs, photographs, or leaflets provided were recorded.\n- Patient decision and consent were documented before treatment began.",
+      "status": "template"
+    },
+    {
+      "id": "safeguarding-pathway",
+      "title": "Safeguarding escalation pathway",
+      "summary": "A starter pathway for recognising safeguarding concerns in dental settings and escalating them appropriately.",
+      "body": "## When to use this pathway\n\nUse this pathway when a child, adult at risk, patient, or accompanying person may be experiencing harm, neglect, exploitation, or abuse. Dental teams may notice injuries, missed appointments, concerning behaviour, or disclosure during routine care.\n\n## Immediate actions\n\nIf there is immediate danger, call emergency services and inform the senior person on duty. Otherwise, record the concern factually and contact the practice safeguarding lead before the end of the working day.\n\n## Checklist\n\n- Record what was seen, heard, or disclosed using the person's own words where possible.\n- Do not investigate beyond what is needed to keep someone safe.\n- Share information only with staff who need to know.\n- Follow local authority or NHS safeguarding referral routes.\n- Document decisions, referrals, and follow-up responsibilities.",
+      "status": "template"
+    },
+    {
+      "id": "infection-control-guidance",
+      "title": "Infection prevention & control guidance",
+      "summary": "A concise starter guide for routine infection prevention controls in a dental workplace.",
+      "body": "## Core standard\n\nAll staff are responsible for reducing avoidable infection risk. This guidance should be adapted to the practice layout, local decontamination room, treatment workflow, and current dental infection prevention guidance.\n\n## Routine controls\n\nApply standard precautions for every patient. Keep surgeries and shared areas visibly clean, follow hand hygiene expectations, use PPE according to task risk, and clean reusable equipment between uses.\n\n## Checklist\n\n- Hand hygiene facilities and supplies are available.\n- Surgery zoning separates clean and contaminated activity.\n- Cleaning schedules identify owner, frequency, and sign-off.\n- Sharps and clinical waste are handled through approved routes.\n- Exposure events, spillages, and suspected outbreaks are escalated promptly.\n- Audit findings are reviewed and actions tracked.",
+      "status": "template"
+    },
+    {
+      "id": "decontamination-protocol",
+      "title": "Dental decontamination protocol",
+      "summary": "A starter protocol for moving reusable dental instruments through dirty, clean, and storage stages.",
+      "body": "## Purpose\n\nUse this protocol to describe how reusable dental instruments move from chairside use to safe storage. Adapt it to the equipment, room layout, and validation records in the practice.\n\n## Workflow\n\nTransport used instruments safely to the decontamination area. Keep dirty and clean stages separated. Inspect, clean, rinse, dry, package where required, sterilise using a validated cycle, and store instruments so sterility or cleanliness is protected until use.\n\n## Checklist\n\n- Used instruments are transported in a lidded container.\n- Staff wear task-appropriate PPE during dirty stages.\n- Manual cleaning, ultrasonic cleaning, and washer disinfector steps are recorded where used.\n- Steriliser cycle records are checked and retained.\n- Failed cycles or damaged instruments are quarantined and escalated.\n- Daily and weekly decontamination checks are signed off.",
+      "status": "template"
+    },
+    {
+      "id": "emergency-drugs-reference",
+      "title": "Emergency drugs reference",
+      "summary": "A starter reference for checking emergency drug availability, expiry, and team responsibilities.",
+      "body": "## Purpose\n\nThis reference helps practices maintain a clear record of emergency medicines and equipment checks. It is not a dosing guide; teams should keep the current approved emergency medicines guidance available and train against it.\n\n## What to record\n\nList the emergency medicines held, storage location, expiry dates, batch numbers where required, and the person responsible for routine checks. Include oxygen, AED, airways, syringes, and other emergency equipment in the same review cycle.\n\n## Checklist\n\n- Emergency kit location is known to all staff.\n- Medicines and equipment are checked at the agreed frequency.\n- Expired, missing, or damaged items are replaced promptly.\n- Temperature or storage requirements are followed.\n- Medical emergency training and scenario practice are recorded.\n- Any use of emergency medicines triggers restock and incident review.",
+      "status": "template"
+    }
+  ],
+  "vets": [
+    {
+      "id": "medical-history-protocol",
+      "title": "Medical history update protocol",
+      "summary": "A starter process for collecting, reviewing, and recording animal patient history updates before care is delivered.",
+      "body": "## Purpose\n\nUse this protocol to keep animal patient histories current before consultation, treatment, surgery, dispensing, or advice. The aim is to make sure the clinical team has a reliable view of presenting concerns, medicines, allergies or reactions, vaccination status, and relevant owner observations.\n\n## Suggested process\n\nAsk clients to confirm changes at booking, admission, and consultation. Clinical staff should review the history, clarify anything unclear, and record the outcome in the practice management system before care starts.\n\n## Checklist\n\n- Confirm current medicines, supplements, allergies, and adverse reactions.\n- Ask about appetite, drinking, toileting, behaviour, and recent deterioration.\n- Record species, breed, age, weight, and owner contact details.\n- Escalate urgent changes to the responsible veterinary surgeon.\n- Document if the client reports no changes.",
+      "status": "template"
+    },
+    {
+      "id": "consent-form-template",
+      "title": "Consent form template",
+      "summary": "A practical veterinary consent note structure covering options, risks, costs, and client questions.",
+      "body": "## Consent discussion\n\nThis template is for recording the conversation that supports consent for veterinary care. It should be adapted to the procedure or care decision and used alongside local admission or operation consent forms.\n\n## Record the following\n\nDescribe the proposed care in plain language, why it is being recommended, and what alternatives were discussed. Include material risks, likely benefits, expected recovery, aftercare, fees or estimates, and what may happen if the client chooses no treatment.\n\n## Checklist\n\n- Client identity and authority to consent were confirmed.\n- Benefits and common or serious risks were explained.\n- Reasonable alternatives were discussed.\n- Costs, follow-up, and aftercare were explained.\n- Client questions and final decision were recorded.",
+      "status": "template"
+    },
+    {
+      "id": "safeguarding-pathway",
+      "title": "Safeguarding escalation pathway",
+      "summary": "A starter pathway for recognising welfare and safeguarding concerns in veterinary settings.",
+      "body": "## When to use this pathway\n\nUse this pathway when staff are worried about animal welfare, client vulnerability, domestic abuse indicators, or risks to children or adults connected with the case. Veterinary teams may see patterns that other services do not.\n\n## Immediate actions\n\nIf there is immediate danger to a person, call emergency services. For animal welfare concerns, inform the veterinary surgeon or senior person on duty and follow the agreed escalation route. Record facts, not assumptions.\n\n## Checklist\n\n- Record injuries, presentation, client explanation, and relevant photographs where appropriate.\n- Do not investigate beyond professional responsibilities.\n- Share information only with staff who need to know.\n- Escalate to the practice safeguarding or welfare lead.\n- Document referrals, advice received, and follow-up responsibilities.",
+      "status": "template"
+    },
+    {
+      "id": "infection-control-guidance",
+      "title": "Infection prevention & control guidance",
+      "summary": "A concise starter guide for routine infection prevention controls in a veterinary workplace.",
+      "body": "## Core standard\n\nAll staff are responsible for reducing avoidable infection risk to patients, clients, and colleagues. Adapt this guidance to consultation rooms, kennels, theatres, isolation facilities, vehicles, and species-specific risks.\n\n## Routine controls\n\nApply standard precautions for every patient. Use hand hygiene, PPE, cleaning, disinfection, laundry handling, and waste controls according to task risk. Isolate suspected infectious cases promptly and communicate restrictions clearly.\n\n## Checklist\n\n- Cleaning products and contact times are documented.\n- Isolation criteria and signage are understood.\n- Laundry, sharps, and clinical waste follow approved routes.\n- Reusable equipment is cleaned between patients.\n- Staff know how to report bites, scratches, needlestick injuries, and zoonotic exposure.\n- Audit findings are reviewed and actions tracked.",
+      "status": "template"
+    },
+    {
+      "id": "referral-pathway-template",
+      "title": "Referral pathway template",
+      "summary": "A reusable structure for documenting when and how animal patients are referred to external services.",
+      "body": "## Referral criteria\n\nUse this template to define when staff should refer an animal patient to another practice, out-of-hours provider, specialist, laboratory, or emergency route. Keep criteria simple enough for the whole team to apply consistently.\n\n## Referral process\n\nDescribe what information must be gathered, who can recommend or approve the referral, how urgent referrals are handled, and how the outcome is tracked. Include owner communication and financial discussion expectations.\n\n## Checklist\n\n- Referral criteria and exclusions are clear.\n- Required history, observations, images, results, or medicines are listed.\n- Urgent and routine routes are separated.\n- Client consent and information-sharing requirements are documented.\n- Follow-up owner and review timeframe are recorded.",
+      "status": "template"
+    },
+    {
+      "id": "drug-withdrawal-periods",
+      "title": "Drug withdrawal periods",
+      "summary": "A starter reference for documenting withdrawal-period advice for food-producing animals.",
+      "body": "## Purpose\n\nUse this reference to keep withdrawal-period advice visible and consistently recorded when treating food-producing animals. It should point staff to the current product datasheet, cascade decision notes, and veterinary surgeon instructions.\n\n## What to record\n\nFor each relevant medicine, record the animal or group, dose, route, date supplied or administered, meat and milk withdrawal periods where applicable, and the person who gave advice to the keeper.\n\n## Checklist\n\n- Current datasheet or cascade rationale has been checked.\n- Withdrawal advice is written clearly for the client or keeper.\n- Batch number and expiry are recorded where required.\n- Medicine labels match the documented instructions.\n- Any off-label use is authorised by a veterinary surgeon.\n- Follow-up queries are recorded in the clinical notes.",
+      "status": "template"
+    }
+  ],
+  "physio": [
+    {
+      "id": "medical-history-protocol",
+      "title": "Medical history update protocol",
+      "summary": "A starter process for collecting, reviewing, and recording physiotherapy medical history updates before care is delivered.",
+      "body": "## Purpose\n\nUse this protocol to keep patient medical histories current before assessment, treatment, exercise prescription, or advice. The aim is to make sure physiotherapists have a reliable view of conditions, medicines, red flags, allergies, pregnancy status, and changes that could affect safe care.\n\n## Suggested process\n\nAsk patients to confirm their history at initial assessment, review, and whenever symptoms change. Clinical staff should review updates, clarify anything unclear, and record the outcome in the clinical system before care starts.\n\n## Checklist\n\n- Confirm current medicines, allergies, and relevant diagnoses.\n- Ask about worsening symptoms, neurological signs, trauma, fever, weight loss, or other red flags.\n- Record pain, function, goals, and consent for assessment.\n- Escalate urgent or clinically significant changes to the responsible clinician.\n- Document if the patient reports no changes.",
+      "status": "template"
+    },
+    {
+      "id": "consent-form-template",
+      "title": "Consent form template",
+      "summary": "A practical physiotherapy consent note structure covering assessment, treatment options, risks, and patient questions.",
+      "body": "## Consent discussion\n\nThis template is for recording the conversation that supports consent for physiotherapy assessment and treatment. It should be adapted to hands-on assessment, exercise plans, acupuncture, group classes, or remote care.\n\n## Record the following\n\nDescribe the proposed assessment or treatment in plain language, why it is being recommended, and what alternatives were discussed. Include material risks, likely benefits, expected self-management, and what may happen if the patient chooses no treatment.\n\n## Checklist\n\n- Patient goals and preferences were discussed.\n- Benefits and common or serious risks were explained.\n- Reasonable alternatives were discussed.\n- Home exercise, follow-up, and self-management advice were explained.\n- Patient questions and final decision were recorded.",
+      "status": "template"
+    },
+    {
+      "id": "safeguarding-pathway",
+      "title": "Safeguarding escalation pathway",
+      "summary": "A starter pathway for recognising concerns, recording facts, and escalating to the right safeguarding lead.",
+      "body": "## When to use this pathway\n\nUse this pathway when a patient, child, or vulnerable adult may be at risk of harm, neglect, exploitation, or abuse. Physiotherapy teams may notice injuries, functional changes, disclosures, or concerning attendance patterns.\n\n## Immediate actions\n\nIf there is immediate danger, call emergency services and inform the senior person on duty. If there is no immediate danger, record the concern factually, preserve relevant information, and contact the named safeguarding lead before the end of the working day.\n\n## Checklist\n\n- Record what was seen, heard, or disclosed using the person's own words where possible.\n- Do not investigate beyond what is needed to keep people safe.\n- Share information only with staff who need to know.\n- Follow local authority or NHS safeguarding referral routes.\n- Document decisions, referrals, and follow-up responsibilities.",
+      "status": "template"
+    },
+    {
+      "id": "infection-control-guidance",
+      "title": "Infection prevention & control guidance",
+      "summary": "A concise starter guide for routine infection prevention controls in a physiotherapy workplace.",
+      "body": "## Core standard\n\nAll staff are responsible for reducing avoidable infection risk. This guidance should be adapted to treatment rooms, gyms, rehabilitation equipment, group sessions, and domiciliary work where relevant.\n\n## Routine controls\n\nApply standard precautions for every patient. Keep treatment surfaces and shared equipment visibly clean, follow hand hygiene expectations, use PPE according to task risk, and clean reusable equipment between uses.\n\n## Checklist\n\n- Hand hygiene facilities and supplies are available.\n- Couch, mat, and equipment cleaning responsibilities are clear.\n- Linen, towels, and laundry are handled through approved routes.\n- Staff know when PPE is required.\n- Incidents, exposure events, and suspected outbreaks are escalated promptly.\n- Audit findings are reviewed and actions tracked.",
+      "status": "template"
+    },
+    {
+      "id": "referral-pathway-template",
+      "title": "Referral pathway template",
+      "summary": "A reusable structure for documenting when and how patients are referred to external services.",
+      "body": "## Referral criteria\n\nUse this template to define when staff should refer a patient to a GP, emergency service, consultant, imaging provider, occupational health team, or another professional. Keep the criteria simple enough for clinicians to apply consistently.\n\n## Referral process\n\nDescribe what information must be gathered, who can make the referral, how urgent referrals are handled, and how the outcome is tracked. Include the expected communication back to the patient and any safety-netting advice.\n\n## Checklist\n\n- Referral criteria and red flags are clear.\n- Required observations, history, tests, or letters are listed.\n- Urgent and routine routes are separated.\n- Patient consent and information-sharing requirements are documented.\n- Follow-up owner and review timeframe are recorded.",
+      "status": "template"
+    },
+    {
+      "id": "discharge-criteria",
+      "title": "Discharge criteria",
+      "summary": "A starter framework for deciding when physiotherapy patients are ready for discharge or onward referral.",
+      "body": "## Purpose\n\nUse this framework to make discharge decisions consistent, transparent, and patient-centred. It should be adapted to each pathway, including musculoskeletal, neuro, respiratory, pelvic health, occupational health, or rehabilitation services.\n\n## Criteria to consider\n\nDischarge may be appropriate when goals are met, progress has plateaued, the patient can self-manage safely, or another service is better placed to support ongoing needs. Record the rationale and any advice given.\n\n## Checklist\n\n- Patient goals and outcome measures have been reviewed.\n- Self-management plan and warning signs have been explained.\n- Follow-up or open-access route is clear where offered.\n- Onward referral is made if risk or need remains outside scope.\n- Discharge summary is sent to relevant parties with patient consent.",
+      "status": "template"
+    }
+  ]
+}
