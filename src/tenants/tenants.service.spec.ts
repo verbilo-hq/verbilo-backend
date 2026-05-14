@@ -748,6 +748,103 @@ describe('TenantsService', () => {
     });
   });
 
+  // VER-77: when an existing CDN-hosted logo is replaced or cleared,
+  // delete the previous S3 object as well. Branding update is the
+  // source of truth — operator clicked Save Branding after Remove (or
+  // pasted a different URL over an upload).
+  it('deletes the previous CDN logo from S3 when logoUrl is cleared', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const previousCdnUrl =
+      'https://verbilo-tenant-logos.s3.eu-west-2.amazonaws.com/tenants/tenant-id/logo-111.png';
+    const existingTenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      logoUrl: previousCdnUrl,
+      primaryColor: null,
+      secondaryColor: null,
+      accentColor: null,
+      archivedAt: null,
+      createdAt,
+    };
+    const updatedTenant = { ...existingTenant, logoUrl: null };
+
+    tenantFindUnique.mockResolvedValue(existingTenant);
+    tenantUpdate.mockResolvedValue(updatedTenant);
+
+    await service.updateBranding('tenant-id', { logoUrl: null }, actor);
+
+    expect(deleteObject).toHaveBeenCalledWith({
+      key: 'tenants/tenant-id/logo-111.png',
+    });
+  });
+
+  it('does NOT touch S3 when clearing an external logoUrl', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const existingTenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      logoUrl: 'https://cdn.example.com/old-logo.png',
+      primaryColor: null,
+      secondaryColor: null,
+      accentColor: null,
+      archivedAt: null,
+      createdAt,
+    };
+    const updatedTenant = { ...existingTenant, logoUrl: null };
+
+    tenantFindUnique.mockResolvedValue(existingTenant);
+    tenantUpdate.mockResolvedValue(updatedTenant);
+
+    await service.updateBranding('tenant-id', { logoUrl: null }, actor);
+
+    expect(deleteObject).not.toHaveBeenCalled();
+  });
+
+  it('still resolves when S3 delete fails during branding clear', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const previousCdnUrl =
+      'https://verbilo-tenant-logos.s3.eu-west-2.amazonaws.com/tenants/tenant-id/logo-222.png';
+    const existingTenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      logoUrl: previousCdnUrl,
+      primaryColor: null,
+      secondaryColor: null,
+      accentColor: null,
+      archivedAt: null,
+      createdAt,
+    };
+    const updatedTenant = { ...existingTenant, logoUrl: null };
+
+    tenantFindUnique.mockResolvedValue(existingTenant);
+    tenantUpdate.mockResolvedValue(updatedTenant);
+    deleteObject.mockRejectedValueOnce(new Error('S3 outage'));
+
+    // Branding update still completes successfully despite S3 trouble.
+    await expect(
+      service.updateBranding('tenant-id', { logoUrl: null }, actor),
+    ).resolves.toEqual(
+      expect.objectContaining({ logoUrl: null }),
+    );
+    // Audit log captures the branding change (the S3 failure is just
+    // logged as a warning, not a separate audit row in this flow).
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'tenant.branding.updated' }),
+    );
+  });
+
   it('rejects tenant branding updates outside the actor tenant scope', async () => {
     const createdAt = new Date('2026-05-10T10:00:00.000Z');
     const companyAdmin: DbUserRequestContext = {
@@ -1156,6 +1253,110 @@ describe('TenantsService', () => {
     expect(auditRecord).not.toHaveBeenCalledWith(
       expect.objectContaining({
         action: 'tenant.user.cognito_delete_failed',
+      }),
+    );
+  });
+
+  // VER-77: tenant delete also tears down the tenant's CDN-hosted logo
+  // from S3, in addition to Vercel + Route53 + Cognito.
+  it('deletes the CDN logo from S3 during tenant delete', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const cdnLogoUrl =
+      'https://verbilo-tenant-logos.s3.eu-west-2.amazonaws.com/tenants/tenant-id/logo-9000.webp';
+    const tenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      logoUrl: cdnLogoUrl,
+      archivedAt: null,
+      createdAt,
+    };
+
+    tenantFindUnique.mockResolvedValue(tenant);
+    tenantDelete.mockResolvedValue(tenant);
+
+    await expect(
+      service.deleteTenant('tenant-id', actor),
+    ).resolves.toBeUndefined();
+
+    expect(deleteObject).toHaveBeenCalledWith({
+      key: 'tenants/tenant-id/logo-9000.webp',
+    });
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'tenant.logo.removed',
+        payload: expect.objectContaining({
+          key: 'tenants/tenant-id/logo-9000.webp',
+          slug: 'acme-dental',
+        }),
+      }),
+    );
+  });
+
+  it('skips S3 cleanup when the tenant has no logo or an external logo', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const tenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      // External URL — not our CDN; we don't own this object.
+      logoUrl: 'https://cdn.example.com/their-logo.png',
+      archivedAt: null,
+      createdAt,
+    };
+
+    tenantFindUnique.mockResolvedValue(tenant);
+    tenantDelete.mockResolvedValue(tenant);
+
+    await expect(
+      service.deleteTenant('tenant-id', actor),
+    ).resolves.toBeUndefined();
+
+    expect(deleteObject).not.toHaveBeenCalled();
+    expect(auditRecord).not.toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'tenant.logo.removed' }),
+    );
+  });
+
+  it('logs a logo.remove_failed audit when S3 errors during tenant delete', async () => {
+    const createdAt = new Date('2026-05-10T10:00:00.000Z');
+    const cdnLogoUrl =
+      'https://verbilo-tenant-logos.s3.eu-west-2.amazonaws.com/tenants/tenant-id/logo-9001.webp';
+    const tenant = {
+      id: 'tenant-id',
+      name: 'Acme Dental',
+      slug: 'acme-dental',
+      sector: 'dental',
+      enabledModules: ['documents'],
+      settings: {},
+      logoUrl: cdnLogoUrl,
+      archivedAt: null,
+      createdAt,
+    };
+
+    tenantFindUnique.mockResolvedValue(tenant);
+    tenantDelete.mockResolvedValue(tenant);
+    deleteObject.mockRejectedValueOnce(new Error('S3 outage'));
+
+    // Tenant delete still resolves — DB row + Vercel + Route53 already
+    // cleaned; the S3 failure is best-effort cleanup.
+    await expect(
+      service.deleteTenant('tenant-id', actor),
+    ).resolves.toBeUndefined();
+
+    expect(auditRecord).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: 'tenant.logo.remove_failed',
+        payload: expect.objectContaining({
+          key: 'tenants/tenant-id/logo-9001.webp',
+          error: 'S3 outage',
+        }),
       }),
     );
   });
