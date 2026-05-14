@@ -135,6 +135,27 @@ describe('capabilities', () => {
     expect(hasCapability('employee', CAPABILITIES.USERS_LIST)).toBe(false);
   });
 
+  it('grants audit reads only to platform and tenant-wide admin roles', () => {
+    const allowedRoles: UserRole[] = [
+      'verbilo_super_admin',
+      'verbilo_support',
+      'company_owner',
+      'company_admin',
+    ];
+    const deniedRoles: UserRole[] = [
+      'area_manager',
+      'practice_manager',
+      'employee',
+    ];
+
+    for (const role of allowedRoles) {
+      expect(hasCapability(role, CAPABILITIES.AUDIT_READ)).toBe(true);
+    }
+    for (const role of deniedRoles) {
+      expect(hasCapability(role, CAPABILITIES.AUDIT_READ)).toBe(false);
+    }
+  });
+
   it('orders role ranks for privilege checks', () => {
     expect(roleRanksAtOrAbove('verbilo_super_admin', 'verbilo_support')).toBe(
       true,
