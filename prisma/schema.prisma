@@ -26,22 +26,23 @@ enum StaffRole {
 }
 
 model Tenant {
-  id             String        @id @default(uuid()) @db.Uuid
-  name           String
-  slug           String        @unique
-  sector         String        @default("healthcare")
-  enabledModules String[]      @default([])
-  settings       Json          @default("{}")
-  logoUrl        String?
-  primaryColor   String?       @db.VarChar(9)
-  secondaryColor String?       @db.VarChar(9)
-  accentColor    String?       @db.VarChar(9)
-  archivedAt     DateTime?
-  createdAt      DateTime      @default(now())
-  sites          Site[]
-  users          User[]
-  patients       Patient[]
-  staff          StaffMember[]
+  id              String        @id @default(uuid()) @db.Uuid
+  name            String
+  slug            String        @unique
+  sector          String        @default("healthcare")
+  enabledModules  String[]      @default([])
+  settings        Json          @default("{}")
+  onboardingState Json          @default("{}")
+  logoUrl         String?
+  primaryColor    String?       @db.VarChar(9)
+  secondaryColor  String?       @db.VarChar(9)
+  accentColor     String?       @db.VarChar(9)
+  archivedAt      DateTime?
+  createdAt       DateTime      @default(now())
+  sites           Site[]
+  users           User[]
+  patients        Patient[]
+  staff           StaffMember[]
 }
 
 model Site {
