@@ -18,6 +18,7 @@ export const CAPABILITIES = {
   USERS_DISABLE: 'users.disable',
   USERS_DELETE: 'users.delete',
   USERS_RESET_PASSWORD: 'users.reset_password',
+  AUDIT_READ: 'audit.read',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -51,6 +52,7 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, ReadonlySet<Capability>>> =
       CAPABILITIES.USERS_LIST,
       CAPABILITIES.USERS_CREATE,
       CAPABILITIES.USERS_ASSIGN_SITE,
+      CAPABILITIES.AUDIT_READ,
     ]),
     company_owner: new Set<Capability>([
       CAPABILITIES.TENANT_UPDATE,
@@ -62,6 +64,7 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, ReadonlySet<Capability>>> =
       CAPABILITIES.USERS_DISABLE,
       CAPABILITIES.USERS_DELETE,
       CAPABILITIES.USERS_RESET_PASSWORD,
+      CAPABILITIES.AUDIT_READ,
     ]),
     company_admin: new Set<Capability>([
       CAPABILITIES.TENANT_UPDATE,
@@ -73,6 +76,7 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, ReadonlySet<Capability>>> =
       CAPABILITIES.USERS_DISABLE,
       CAPABILITIES.USERS_DELETE,
       CAPABILITIES.USERS_RESET_PASSWORD,
+      CAPABILITIES.AUDIT_READ,
     ]),
     area_manager: new Set<Capability>([
       CAPABILITIES.USERS_LIST,
