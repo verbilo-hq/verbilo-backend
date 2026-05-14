@@ -1,0 +1,25 @@
+{
+  "default": [
+    {
+      "id": "staff-handbook",
+      "title": "Staff handbook (starter)",
+      "summary": "A concise handbook starter covering expectations, conduct, confidentiality, and day-to-day working standards.",
+      "body": "## Purpose\n\nThis handbook gives staff a clear starting point for how the organisation works. It should be adapted to local contracts, policies, benefits, and operational procedures before publication.\n\n## Working standards\n\nStaff are expected to act professionally, protect confidential information, follow agreed clinical and operational procedures, and raise concerns promptly. Managers should make sure staff know where to find current policies and who to contact for support.\n\n## Include locally\n\n- Working hours, breaks, rota expectations, and overtime rules.\n- Dress code, ID badges, and professional conduct expectations.\n- Confidentiality, data protection, and acceptable technology use.\n- Mandatory training and appraisal requirements.\n- Incident reporting, complaints, and safeguarding escalation routes.\n- Where to find detailed HR policies and named contacts.",
+      "status": "template"
+    },
+    {
+      "id": "annual-leave-sickness",
+      "title": "Annual leave & sickness policy",
+      "summary": "A starter policy for requesting leave, reporting sickness, and supporting safe staffing levels.",
+      "body": "## Annual leave\n\nStaff should request annual leave through the agreed local process before making commitments. Managers should consider service needs, fairness, minimum staffing levels, and existing bookings before approving requests.\n\n## Sickness absence\n\nStaff must notify their manager as early as possible if they are unwell and unable to work. The manager should record the absence, confirm expected updates, and arrange return-to-work discussion when the staff member returns.\n\n## Checklist\n\n- Leave requests include dates, role, site, and cover impact.\n- Sickness reporting route and deadlines are clear.\n- Fit notes are collected where required.\n- Return-to-work conversations are recorded.\n- Repeated or long-term absence triggers supportive review.\n- Patient safety and rota cover are considered before approval.",
+      "status": "template"
+    },
+    {
+      "id": "whistleblowing-complaints",
+      "title": "Whistleblowing & complaints policy",
+      "summary": "A starter policy explaining how staff can raise concerns safely and how complaints are handled.",
+      "body": "## Raising concerns\n\nStaff should be able to raise concerns about safety, conduct, fraud, discrimination, poor practice, or any issue that may harm patients, clients, colleagues, or the organisation. Concerns should be listened to, recorded, and handled without retaliation.\n\n## Complaints handling\n\nComplaints should be acknowledged promptly, investigated proportionately, and used to improve services. Keep people informed, record decisions, and make sure learning is shared with the right teams.\n\n## Checklist\n\n- Named contacts are listed for line management and senior escalation.\n- Anonymous and confidential routes are explained.\n- Urgent safety concerns are escalated immediately.\n- Complaints have an owner and target response date.\n- Outcomes, apologies, actions, and learning are recorded.\n- Staff know external routes if internal escalation is not appropriate.",
+      "status": "template"
+    }
+  ]
+}

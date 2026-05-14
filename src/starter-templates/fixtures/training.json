@@ -1,0 +1,25 @@
+{
+  "default": [
+    {
+      "id": "induction-checklist",
+      "title": "New starter induction checklist",
+      "summary": "A practical checklist for onboarding staff safely across systems, policies, training, and local workflows.",
+      "body": "## Purpose\n\nUse this checklist to make induction consistent for new employees, locums, contractors, and returning staff. Managers should adapt it by role, site, and sector-specific requirements.\n\n## First week priorities\n\nThe new starter should understand their role, who supervises them, where policies are kept, how to report concerns, and which systems they can access. Do not leave access, mandatory training, or safeguarding expectations informal.\n\n## Checklist\n\n- Identity, right-to-work, references, and role checks completed.\n- System accounts, email, rota, and site access set up.\n- Local fire, first aid, infection control, and incident reporting explained.\n- Safeguarding lead and escalation route introduced.\n- Mandatory training plan agreed.\n- Probation, supervision, and appraisal dates recorded.",
+      "status": "template"
+    },
+    {
+      "id": "safeguarding-refresher",
+      "title": "Safeguarding refresher (annual)",
+      "summary": "A starter annual refresher outline for recognising, recording, and escalating safeguarding concerns.",
+      "body": "## Purpose\n\nThis refresher helps staff keep safeguarding responsibilities visible between formal training cycles. It should be adapted to role level, local authority pathways, and sector guidance.\n\n## Session outline\n\nReview common indicators of abuse, neglect, exploitation, domestic abuse, and professional curiosity. Revisit the organisation's named safeguarding lead, referral process, documentation standards, and information-sharing expectations.\n\n## Checklist\n\n- Staff can identify the safeguarding lead and deputy.\n- Staff know what to do if someone is in immediate danger.\n- Case notes are factual and use the person's own words where possible.\n- Confidentiality limits and information-sharing duties are understood.\n- Local referral routes and phone numbers are current.\n- Attendance, quiz results, and follow-up actions are recorded.",
+      "status": "template"
+    },
+    {
+      "id": "infection-control-refresher",
+      "title": "Infection control & H&S refresher (annual)",
+      "summary": "A starter refresher outline for infection prevention, health and safety, and incident reporting.",
+      "body": "## Purpose\n\nThis refresher keeps routine infection prevention and health and safety controls front of mind. Adapt it to local premises, equipment, clinical activity, and audit findings.\n\n## Session outline\n\nReview hand hygiene, PPE, cleaning responsibilities, waste routes, sharps or injury reporting, fire safety, manual handling, and the process for escalating risks. Include recent incidents or audit findings so the training is relevant.\n\n## Checklist\n\n- Staff know where cleaning schedules and risk assessments are kept.\n- PPE and hand hygiene expectations are clear.\n- Waste, sharps, laundry, and spill procedures are understood.\n- Fire, first aid, and accident reporting routes are current.\n- Staff can explain how to report hazards or near misses.\n- Attendance and actions are recorded.",
+      "status": "template"
+    }
+  ]
+}
