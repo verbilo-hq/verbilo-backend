@@ -1,0 +1,76 @@
+{
+  "dental": [
+    {
+      "id": "safe",
+      "title": "Safe — incident reporting & response evidence",
+      "summary": "A starter evidence prompt for showing how the service identifies, reports, reviews, and learns from safety incidents.",
+      "body": "## Evidence to collect\n\nThis item should hold evidence that the service manages safety risks and responds to incidents. It is a prompt for evidence, not evidence by itself.\n\n## Suggested documents\n\nInclude incident logs, significant event analyses, duty of candour records where relevant, safeguarding escalation records, risk assessments, emergency medicines checks, infection prevention audits, sharps records, and actions from safety meetings.\n\n## Checklist\n\n- Incidents have dates, owners, outcomes, and learning.\n- Urgent risks show immediate action and follow-up.\n- Audits include findings, action plans, and completion evidence.\n- Staff know how to report concerns.\n- Trends are reviewed by leadership rather than left as isolated events.",
+      "status": "template"
+    },
+    {
+      "id": "effective",
+      "title": "Effective — training & competence evidence",
+      "summary": "A starter evidence prompt for showing staff are trained, supervised, and competent for their roles.",
+      "body": "## Evidence to collect\n\nUse this item to gather evidence that care is delivered by people with the right skills, training, and support. It should point inspectors or managers to records, not replace them.\n\n## Suggested documents\n\nInclude induction records, mandatory training matrices, CPD logs, appraisal notes, supervision records, clinical audit outcomes, role-specific competence checks, and evidence that guidance or audit findings changed practice.\n\n## Checklist\n\n- Training records show completion dates and renewal dates.\n- Gaps have owners and target dates.\n- Clinical audits link to actions and re-audit where needed.\n- New starters have induction sign-off.\n- Staff can explain how they keep knowledge current.",
+      "status": "template"
+    },
+    {
+      "id": "caring",
+      "title": "Caring — patient feedback & dignity evidence",
+      "summary": "A starter evidence prompt for dignity, respect, accessibility, and patient feedback.",
+      "body": "## Evidence to collect\n\nUse this item to show how the service listens to patients and protects dignity, privacy, and respect. It should include feedback from different routes and examples of improvement.\n\n## Suggested documents\n\nInclude compliments, survey results, accessibility adjustments, translation or communication support records, privacy arrangements, patient information materials, and meeting notes where feedback led to change.\n\n## Checklist\n\n- Feedback is gathered through more than one route.\n- Negative feedback is reviewed alongside positive feedback.\n- Reasonable adjustments are recorded where needed.\n- Staff understand privacy and dignity expectations.\n- Actions taken from feedback are visible and dated.",
+      "status": "template"
+    },
+    {
+      "id": "responsive",
+      "title": "Responsive — complaints handling evidence",
+      "summary": "A starter evidence prompt for showing complaints, access needs, and service changes are handled consistently.",
+      "body": "## Evidence to collect\n\nUse this item to evidence how the service responds to complaints, changing patient needs, access issues, and operational pressures. It should help managers keep examples together.\n\n## Suggested documents\n\nInclude complaints logs, acknowledgements, investigation notes, response letters, learning actions, appointment access reviews, missed appointment analysis, accessibility adjustments, and examples of service changes made after feedback.\n\n## Checklist\n\n- Complaints have owners, dates, responses, and outcomes.\n- Learning is shared with relevant staff.\n- Access issues are reviewed rather than treated as isolated problems.\n- Patients are told how to complain.\n- Actions from complaints are tracked to completion.",
+      "status": "template"
+    },
+    {
+      "id": "well-led",
+      "title": "Well-led — governance, audits, policies evidence",
+      "summary": "A starter evidence prompt for governance meetings, policy control, audits, and leadership oversight.",
+      "body": "## Evidence to collect\n\nUse this item to evidence how leaders know the service is safe, compliant, and improving. It should connect meetings, audits, risks, and policy reviews into a clear governance picture.\n\n## Suggested documents\n\nInclude governance meeting minutes, risk registers, audit schedules, policy review logs, staff feedback, business continuity plans, training oversight, action trackers, and evidence that leaders review incidents, complaints, and performance trends.\n\n## Checklist\n\n- Policies have owners and review dates.\n- Audit actions are assigned and followed up.\n- Risks are reviewed at leadership level.\n- Staff know how to raise concerns.\n- Meeting minutes show decisions, not just discussion.",
+      "status": "template"
+    }
+  ],
+  "gp": [
+    {
+      "id": "safe",
+      "title": "Safe — incident reporting & response evidence",
+      "summary": "A starter evidence prompt for showing how the service identifies, reports, reviews, and learns from safety incidents.",
+      "body": "## Evidence to collect\n\nThis item should hold evidence that the service manages safety risks and responds to incidents. It is a prompt for evidence, not evidence by itself.\n\n## Suggested documents\n\nInclude incident logs, significant event analyses, safeguarding referrals, medicines safety reviews, emergency equipment checks, infection prevention audits, cold-chain records, and actions from clinical governance meetings.\n\n## Checklist\n\n- Incidents have dates, owners, outcomes, and learning.\n- Urgent risks show immediate action and follow-up.\n- Audits include findings, action plans, and completion evidence.\n- Staff know how to report concerns.\n- Trends are reviewed by leadership rather than left as isolated events.",
+      "status": "template"
+    },
+    {
+      "id": "effective",
+      "title": "Effective — training & competence evidence",
+      "summary": "A starter evidence prompt for showing staff are trained, supervised, and competent for their roles.",
+      "body": "## Evidence to collect\n\nUse this item to gather evidence that care is delivered by people with the right skills, training, and support. It should point inspectors or managers to records, not replace them.\n\n## Suggested documents\n\nInclude induction records, mandatory training matrices, appraisal notes, GP appraisal or revalidation evidence where appropriate, nurse revalidation support, clinical supervision, prescribing audits, and examples of guidance updates improving care.\n\n## Checklist\n\n- Training records show completion dates and renewal dates.\n- Gaps have owners and target dates.\n- Clinical audits link to actions and re-audit where needed.\n- New starters have induction sign-off.\n- Staff can explain how they keep knowledge current.",
+      "status": "template"
+    },
+    {
+      "id": "caring",
+      "title": "Caring — patient feedback & dignity evidence",
+      "summary": "A starter evidence prompt for dignity, respect, accessibility, and patient feedback.",
+      "body": "## Evidence to collect\n\nUse this item to show how the service listens to patients and protects dignity, privacy, and respect. It should include feedback from different routes and examples of improvement.\n\n## Suggested documents\n\nInclude Friends and Family Test results, complaints themes, compliments, accessibility adjustments, interpreter or communication support records, privacy arrangements, patient information materials, and patient participation group notes where relevant.\n\n## Checklist\n\n- Feedback is gathered through more than one route.\n- Negative feedback is reviewed alongside positive feedback.\n- Reasonable adjustments are recorded where needed.\n- Staff understand privacy and dignity expectations.\n- Actions taken from feedback are visible and dated.",
+      "status": "template"
+    },
+    {
+      "id": "responsive",
+      "title": "Responsive — complaints handling evidence",
+      "summary": "A starter evidence prompt for showing complaints, access needs, and service changes are handled consistently.",
+      "body": "## Evidence to collect\n\nUse this item to evidence how the service responds to complaints, changing patient needs, access issues, and operational pressures. It should help managers keep examples together.\n\n## Suggested documents\n\nInclude complaints logs, acknowledgements, investigation notes, response letters, learning actions, appointment access reviews, telephone access data, DNA analysis, accessibility adjustments, and examples of service changes made after feedback.\n\n## Checklist\n\n- Complaints have owners, dates, responses, and outcomes.\n- Learning is shared with relevant staff.\n- Access issues are reviewed rather than treated as isolated problems.\n- Patients are told how to complain.\n- Actions from complaints are tracked to completion.",
+      "status": "template"
+    },
+    {
+      "id": "well-led",
+      "title": "Well-led — governance, audits, policies evidence",
+      "summary": "A starter evidence prompt for governance meetings, policy control, audits, and leadership oversight.",
+      "body": "## Evidence to collect\n\nUse this item to evidence how leaders know the service is safe, compliant, and improving. It should connect meetings, audits, risks, and policy reviews into a clear governance picture.\n\n## Suggested documents\n\nInclude governance meeting minutes, risk registers, audit schedules, policy review logs, staff feedback, business continuity plans, training oversight, action trackers, and evidence that leaders review incidents, complaints, access, and performance trends.\n\n## Checklist\n\n- Policies have owners and review dates.\n- Audit actions are assigned and followed up.\n- Risks are reviewed at leadership level.\n- Staff know how to raise concerns.\n- Meeting minutes show decisions, not just discussion.",
+      "status": "template"
+    }
+  ]
+}

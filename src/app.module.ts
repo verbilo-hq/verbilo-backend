@@ -21,6 +21,7 @@ import { HealthModule } from './health/health.module';
 import { StaffModule } from './staff/staff.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { AdminUsersModule } from './admin/admin-users.module';
+import { StarterTemplatesModule } from './starter-templates/starter-templates.module';
 
 @Module({
   imports: [
@@ -33,6 +34,7 @@ import { AdminUsersModule } from './admin/admin-users.module';
     AdminUsersModule,
     StaffModule,
     DashboardModule,
+    StarterTemplatesModule,
     HealthModule,
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 60 }]),
   ],

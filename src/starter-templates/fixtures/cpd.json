@@ -1,0 +1,56 @@
+{
+  "default": [
+    {
+      "id": "continuing-professional-development",
+      "title": "Continuing Professional Development",
+      "summary": "A generic CPD framework header for healthcare teams to adapt by role and regulator.",
+      "body": "## Purpose\n\nContinuing Professional Development helps staff keep knowledge, skills, judgement, and professional confidence current. Teams should record learning that is relevant to their role, scope of practice, service risks, and development goals.\n\n## What to log\n\nUseful CPD can include courses, conferences, supervised practice, audit work, reflective learning, peer review, reading, simulation, and teaching. The log should connect activity to learning outcomes and, where possible, changes in practice.\n\n## Checklist\n\n- Record date, activity type, provider, and duration.\n- Link learning to role, service need, or personal development plan.\n- Add reflection on what changed or what will be done differently.\n- Attach certificates or notes where available.\n- Check whether the staff member's regulator has specific hour, cycle, or evidence requirements.",
+      "status": "template"
+    }
+  ],
+  "dental": [
+    {
+      "id": "gdc-enhanced-cpd",
+      "title": "GDC Enhanced CPD",
+      "summary": "A CPD framework header for dental professionals following the GDC Enhanced CPD cycle.",
+      "body": "## GDC Enhanced CPD\n\nDental professionals should maintain a CPD record aligned to the GDC Enhanced CPD scheme. The framework is based on a five-year cycle, with dentists and dental care professionals expected to complete 100 hours of CPD over five years, including verifiable CPD and annual declarations.\n\n## Learning outcomes\n\nActivities should be mapped to GDC learning outcomes A to D, covering communication, effective management, knowledge and skills, and professionalism. The CPD log should make the link between activity, outcome, and reflection easy to review.\n\n## Checklist\n\n- Record activity date, provider, duration, and whether it is verifiable.\n- Map each item to learning outcomes A, B, C, or D.\n- Add reflection on relevance to current scope of practice.\n- Attach certificates or evidence where available.\n- Review progress before annual declaration.",
+      "status": "template"
+    }
+  ],
+  "vets": [
+    {
+      "id": "rcvs-cpd",
+      "title": "RCVS CPD",
+      "summary": "A CPD framework header for veterinary professionals following RCVS expectations.",
+      "body": "## RCVS CPD\n\nVeterinary surgeons and veterinary nurses should keep CPD records aligned to RCVS expectations. The common planning assumption is 35 hours per year, with activity chosen to support safe practice, professional development, and the needs of the role.\n\n## What to log\n\nCPD can include courses, congress sessions, clinical clubs, reading, audit, reflection, case discussion, mentoring, teaching, and practical skills development. The record should focus on learning value, not only attendance.\n\n## Checklist\n\n- Record date, duration, activity type, and provider.\n- Explain why the activity was relevant to the role.\n- Add reflection on what was learned or changed.\n- Attach certificates or notes where available.\n- Review annual progress against the 35-hour expectation.",
+      "status": "template"
+    }
+  ],
+  "optometry": [
+    {
+      "id": "goc-cpd",
+      "title": "GOC CPD",
+      "summary": "A CPD framework header for optical professionals following the GOC CPD cycle.",
+      "body": "## GOC CPD\n\nOptometrists and dispensing opticians should maintain CPD records aligned to the GOC cycle. The GOC operates a three-year CPD cycle with requirements that include points, peer review or interactive learning where relevant, and coverage of learning outcomes appropriate to the registrant's role.\n\n## Learning outcomes\n\nThe CPD log should show how each activity supports safe, effective, and professional practice. It should be easy to see the activity, the learning outcome, reflection, and any supporting evidence.\n\n## Checklist\n\n- Record date, provider, activity type, and points or duration.\n- Map activity to relevant GOC learning outcomes.\n- Note whether the activity was interactive or peer-reviewed if applicable.\n- Add reflection on practice impact.\n- Review progress across the three-year cycle.",
+      "status": "template"
+    }
+  ],
+  "physio": [
+    {
+      "id": "hcpc-cpd",
+      "title": "HCPC CPD",
+      "summary": "A CPD framework header for physiotherapists following HCPC standards and audit expectations.",
+      "body": "## HCPC CPD\n\nPhysiotherapists registered with the HCPC should maintain a continuous, accurate, and varied CPD record. The HCPC standards focus on keeping skills and knowledge up to date, improving practice, and being able to show the benefit of learning if selected for audit.\n\n## Audit readiness\n\nHCPC registrants may be audited at renewal, usually on a two-yearly profession cycle. The log should therefore keep enough evidence and reflection to explain why activities were chosen and how they improved practice or service-user outcomes.\n\n## Checklist\n\n- Keep a dated list of CPD activity across different learning types.\n- Link learning to current or future scope of practice.\n- Reflect on impact for patients, service users, or the team.\n- Store certificates, notes, supervision records, or audit evidence.\n- Review the record before each renewal window.",
+      "status": "template"
+    }
+  ],
+  "gp": [
+    {
+      "id": "gmc-nmc-role-dependent-cpd",
+      "title": "GMC / NMC role-dependent CPD",
+      "summary": "A CPD framework header for GP-sector teams whose requirements depend on professional role and regulator.",
+      "body": "## Role-dependent CPD\n\nPrimary care teams often include doctors, nurses, allied health professionals, pharmacists, managers, and administrators. CPD requirements should be matched to the person's role, regulator, and scope of practice rather than treated as one generic target.\n\n## Common routes\n\nDoctors should align learning to GMC appraisal and revalidation expectations, including reflection, quality improvement, significant events, feedback, and professional development plans. Nurses should align to NMC revalidation, including practice hours, CPD hours, reflective accounts, feedback, and confirmation.\n\n## Checklist\n\n- Record the staff member's role and regulator where applicable.\n- Link CPD to appraisal, revalidation, or local development goals.\n- Attach certificates, reflections, feedback, or quality improvement evidence.\n- Review progress during supervision or appraisal.\n- Keep non-registered staff development records proportionate to their role.",
+      "status": "template"
+    }
+  ]
+}
