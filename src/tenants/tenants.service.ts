@@ -423,6 +423,28 @@ export class TenantsService {
       data,
     });
 
+    // VER-77: if logoUrl is changing AND the previous value pointed at
+    // a CDN-hosted logo, clean up that S3 object. Covers two flows:
+    //   - "Remove" on the branding chip       (from: CDN, to: null)
+    //   - Paste an external URL over an upload (from: CDN, to: other)
+    // The upload endpoint already deletes the previous CDN key on
+    // REPLACE, so a CDN→CDN transition never reaches this branch.
+    // Best-effort — don't fail the branding update if S3 misbehaves.
+    if (diff.logoUrl && typeof diff.logoUrl.from === 'string') {
+      const previousKey = this.s3LogoKeyFromUrl(id, diff.logoUrl.from);
+      if (previousKey) {
+        try {
+          await this.s3.deleteObject({ key: previousKey });
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : 'Unknown error';
+          this.logger.warn(
+            `S3 logo removal failed for ${previousKey} during branding update: ${message}`,
+          );
+        }
+      }
+    }
+
     await this.audit.record({
       actorUserId: actor?.id,
       tenantId: updatedTenant.id,
@@ -681,6 +703,37 @@ export class TenantsService {
         entityId: tenant.id,
         payload: { slug: tenant.slug, error: message },
       });
+    }
+
+    // VER-77: also tear down the tenant's logo from S3 if it lived on
+    // our CDN. Best-effort, same pattern as the other external-resource
+    // cleanups above. Tenants whose logoUrl was external (or absent)
+    // skip silently — s3LogoKeyFromUrl returns null for non-CDN URLs.
+    const tenantLogoKey = this.s3LogoKeyFromUrl(tenant.id, tenant.logoUrl);
+    if (tenantLogoKey) {
+      try {
+        await this.s3.deleteObject({ key: tenantLogoKey });
+        await this.audit.record({
+          actorUserId: actor?.id,
+          action: 'tenant.logo.removed',
+          entityType: 'tenant',
+          entityId: tenant.id,
+          payload: { key: tenantLogoKey, slug: tenant.slug },
+        });
+      } catch (error) {
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.warn(
+          `S3 logo removal failed for ${tenantLogoKey} during tenant delete: ${message}`,
+        );
+        await this.audit.record({
+          actorUserId: actor?.id,
+          action: 'tenant.logo.remove_failed',
+          entityType: 'tenant',
+          entityId: tenant.id,
+          payload: { key: tenantLogoKey, slug: tenant.slug, error: message },
+        });
+      }
     }
   }
 
