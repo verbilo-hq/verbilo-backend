@@ -22,6 +22,9 @@ export const CAPABILITIES = {
   ANNOUNCEMENTS_LIST: 'announcements.list',
   ANNOUNCEMENTS_CREATE: 'announcements.create',
   ANNOUNCEMENTS_DELETE: 'announcements.delete',
+  DOCUMENTS_LIST: 'documents.list',
+  DOCUMENTS_UPLOAD: 'documents.upload',
+  DOCUMENTS_DELETE: 'documents.delete',
 } as const;
 
 export type Capability = (typeof CAPABILITIES)[keyof typeof CAPABILITIES];
@@ -59,6 +62,9 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, ReadonlySet<Capability>>> =
       CAPABILITIES.ANNOUNCEMENTS_LIST,
       CAPABILITIES.ANNOUNCEMENTS_CREATE,
       CAPABILITIES.ANNOUNCEMENTS_DELETE,
+      CAPABILITIES.DOCUMENTS_LIST,
+      CAPABILITIES.DOCUMENTS_UPLOAD,
+      CAPABILITIES.DOCUMENTS_DELETE,
     ]),
     company_owner: new Set<Capability>([
       CAPABILITIES.TENANT_UPDATE,
@@ -74,6 +80,9 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, ReadonlySet<Capability>>> =
       CAPABILITIES.ANNOUNCEMENTS_LIST,
       CAPABILITIES.ANNOUNCEMENTS_CREATE,
       CAPABILITIES.ANNOUNCEMENTS_DELETE,
+      CAPABILITIES.DOCUMENTS_LIST,
+      CAPABILITIES.DOCUMENTS_UPLOAD,
+      CAPABILITIES.DOCUMENTS_DELETE,
     ]),
     company_admin: new Set<Capability>([
       CAPABILITIES.TENANT_UPDATE,
@@ -89,6 +98,9 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, ReadonlySet<Capability>>> =
       CAPABILITIES.ANNOUNCEMENTS_LIST,
       CAPABILITIES.ANNOUNCEMENTS_CREATE,
       CAPABILITIES.ANNOUNCEMENTS_DELETE,
+      CAPABILITIES.DOCUMENTS_LIST,
+      CAPABILITIES.DOCUMENTS_UPLOAD,
+      CAPABILITIES.DOCUMENTS_DELETE,
     ]),
     area_manager: new Set<Capability>([
       CAPABILITIES.USERS_LIST,
@@ -100,6 +112,8 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, ReadonlySet<Capability>>> =
       CAPABILITIES.USERS_RESET_PASSWORD,
       CAPABILITIES.ANNOUNCEMENTS_LIST,
       CAPABILITIES.ANNOUNCEMENTS_CREATE,
+      CAPABILITIES.DOCUMENTS_LIST,
+      CAPABILITIES.DOCUMENTS_UPLOAD,
     ]),
     practice_manager: new Set<Capability>([
       CAPABILITIES.USERS_LIST,
@@ -110,8 +124,13 @@ const ROLE_CAPABILITIES: Readonly<Record<UserRole, ReadonlySet<Capability>>> =
       CAPABILITIES.USERS_RESET_PASSWORD,
       CAPABILITIES.ANNOUNCEMENTS_LIST,
       CAPABILITIES.ANNOUNCEMENTS_CREATE,
+      CAPABILITIES.DOCUMENTS_LIST,
+      CAPABILITIES.DOCUMENTS_UPLOAD,
     ]),
-    employee: new Set<Capability>([CAPABILITIES.ANNOUNCEMENTS_LIST]),
+    employee: new Set<Capability>([
+      CAPABILITIES.ANNOUNCEMENTS_LIST,
+      CAPABILITIES.DOCUMENTS_LIST,
+    ]),
   });
 
 export function hasCapability(role: UserRole, capability: Capability): boolean {

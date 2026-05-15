@@ -20,7 +20,7 @@ describe('capabilities', () => {
     }
   });
 
-  it('grants support read/update capabilities but not destructive capabilities', () => {
+  it('grants support read/update capabilities but not tenant destructive capabilities', () => {
     expect(hasCapability('verbilo_support', CAPABILITIES.TENANT_UPDATE)).toBe(
       true,
     );
@@ -35,6 +35,15 @@ describe('capabilities', () => {
     ).toBe(true);
     expect(
       hasCapability('verbilo_support', CAPABILITIES.ANNOUNCEMENTS_DELETE),
+    ).toBe(true);
+    expect(
+      hasCapability('verbilo_support', CAPABILITIES.DOCUMENTS_LIST),
+    ).toBe(true);
+    expect(
+      hasCapability('verbilo_support', CAPABILITIES.DOCUMENTS_UPLOAD),
+    ).toBe(true);
+    expect(
+      hasCapability('verbilo_support', CAPABILITIES.DOCUMENTS_DELETE),
     ).toBe(true);
     expect(hasCapability('verbilo_support', CAPABILITIES.USERS_CREATE)).toBe(
       true,
@@ -211,6 +220,55 @@ describe('capabilities', () => {
     ).toBe(false);
     expect(
       hasCapability('practice_manager', CAPABILITIES.ANNOUNCEMENTS_DELETE),
+    ).toBe(false);
+  });
+
+  it('grants document capabilities by customer role scope', () => {
+    const listRoles: UserRole[] = [
+      'verbilo_super_admin',
+      'verbilo_support',
+      'company_owner',
+      'company_admin',
+      'area_manager',
+      'practice_manager',
+      'employee',
+    ];
+    const uploadRoles: UserRole[] = [
+      'verbilo_super_admin',
+      'verbilo_support',
+      'company_owner',
+      'company_admin',
+      'area_manager',
+      'practice_manager',
+    ];
+    const deleteRoles: UserRole[] = [
+      'verbilo_super_admin',
+      'verbilo_support',
+      'company_owner',
+      'company_admin',
+    ];
+
+    for (const role of listRoles) {
+      expect(hasCapability(role, CAPABILITIES.DOCUMENTS_LIST)).toBe(true);
+    }
+    for (const role of uploadRoles) {
+      expect(hasCapability(role, CAPABILITIES.DOCUMENTS_UPLOAD)).toBe(true);
+    }
+    for (const role of deleteRoles) {
+      expect(hasCapability(role, CAPABILITIES.DOCUMENTS_DELETE)).toBe(true);
+    }
+
+    expect(hasCapability('employee', CAPABILITIES.DOCUMENTS_UPLOAD)).toBe(
+      false,
+    );
+    expect(hasCapability('employee', CAPABILITIES.DOCUMENTS_DELETE)).toBe(
+      false,
+    );
+    expect(hasCapability('area_manager', CAPABILITIES.DOCUMENTS_DELETE)).toBe(
+      false,
+    );
+    expect(
+      hasCapability('practice_manager', CAPABILITIES.DOCUMENTS_DELETE),
     ).toBe(false);
   });
 
