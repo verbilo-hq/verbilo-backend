@@ -27,6 +27,15 @@ describe('capabilities', () => {
     expect(hasCapability('verbilo_support', CAPABILITIES.USERS_LIST)).toBe(
       true,
     );
+    expect(
+      hasCapability('verbilo_support', CAPABILITIES.ANNOUNCEMENTS_LIST),
+    ).toBe(true);
+    expect(
+      hasCapability('verbilo_support', CAPABILITIES.ANNOUNCEMENTS_CREATE),
+    ).toBe(true);
+    expect(
+      hasCapability('verbilo_support', CAPABILITIES.ANNOUNCEMENTS_DELETE),
+    ).toBe(true);
     expect(hasCapability('verbilo_support', CAPABILITIES.USERS_CREATE)).toBe(
       true,
     );
@@ -154,6 +163,55 @@ describe('capabilities', () => {
     for (const role of deniedRoles) {
       expect(hasCapability(role, CAPABILITIES.AUDIT_READ)).toBe(false);
     }
+  });
+
+  it('grants announcement capabilities by customer role scope', () => {
+    const listRoles: UserRole[] = [
+      'verbilo_super_admin',
+      'verbilo_support',
+      'company_owner',
+      'company_admin',
+      'area_manager',
+      'practice_manager',
+      'employee',
+    ];
+    const createRoles: UserRole[] = [
+      'verbilo_super_admin',
+      'verbilo_support',
+      'company_owner',
+      'company_admin',
+      'area_manager',
+      'practice_manager',
+    ];
+    const deleteRoles: UserRole[] = [
+      'verbilo_super_admin',
+      'verbilo_support',
+      'company_owner',
+      'company_admin',
+    ];
+
+    for (const role of listRoles) {
+      expect(hasCapability(role, CAPABILITIES.ANNOUNCEMENTS_LIST)).toBe(true);
+    }
+    for (const role of createRoles) {
+      expect(hasCapability(role, CAPABILITIES.ANNOUNCEMENTS_CREATE)).toBe(true);
+    }
+    for (const role of deleteRoles) {
+      expect(hasCapability(role, CAPABILITIES.ANNOUNCEMENTS_DELETE)).toBe(true);
+    }
+
+    expect(
+      hasCapability('employee', CAPABILITIES.ANNOUNCEMENTS_CREATE),
+    ).toBe(false);
+    expect(
+      hasCapability('employee', CAPABILITIES.ANNOUNCEMENTS_DELETE),
+    ).toBe(false);
+    expect(
+      hasCapability('area_manager', CAPABILITIES.ANNOUNCEMENTS_DELETE),
+    ).toBe(false);
+    expect(
+      hasCapability('practice_manager', CAPABILITIES.ANNOUNCEMENTS_DELETE),
+    ).toBe(false);
   });
 
   it('orders role ranks for privilege checks', () => {
