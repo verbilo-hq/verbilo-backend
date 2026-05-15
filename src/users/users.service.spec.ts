@@ -91,6 +91,9 @@ describe('UsersService', () => {
       ).resolves.toEqual({
         role: 'company_admin',
         capabilities: [
+          'announcements.create',
+          'announcements.delete',
+          'announcements.list',
           'audit.read',
           'tenant.update',
           'tenant.update_branding',
@@ -115,6 +118,8 @@ describe('UsersService', () => {
       ).resolves.toEqual({
         role: 'area_manager',
         capabilities: [
+          'announcements.create',
+          'announcements.list',
           'users.assign_site',
           'users.create',
           'users.delete',
@@ -132,6 +137,57 @@ describe('UsersService', () => {
       });
     });
 
+    it('returns tenant-scoped capabilities for company_owner', async () => {
+      await expect(
+        service.getMyPermissions(dbUser('company_owner')),
+      ).resolves.toEqual({
+        role: 'company_owner',
+        capabilities: [
+          'announcements.create',
+          'announcements.delete',
+          'announcements.list',
+          'audit.read',
+          'tenant.update',
+          'tenant.update_branding',
+          'users.assign_site',
+          'users.create',
+          'users.delete',
+          'users.disable',
+          'users.list',
+          'users.reset_password',
+          'users.update_role',
+        ].sort(),
+        scope: { kind: 'tenant', tenantId: 'tenant-1' },
+        isPlatformAdmin: false,
+      });
+    });
+
+    it('returns announcement create/list for practice_manager', async () => {
+      await expect(
+        service.getMyPermissions(
+          dbUser('practice_manager', { siteIds: ['site-1'] }),
+        ),
+      ).resolves.toEqual({
+        role: 'practice_manager',
+        capabilities: [
+          'announcements.create',
+          'announcements.list',
+          'users.create',
+          'users.delete',
+          'users.disable',
+          'users.list',
+          'users.reset_password',
+          'users.update_role',
+        ].sort(),
+        scope: {
+          kind: 'sites',
+          tenantId: 'tenant-1',
+          siteIds: ['site-1'],
+        },
+        isPlatformAdmin: false,
+      });
+    });
+
     it('returns empty capabilities and no scope for employee with no assignments', async () => {
       await expect(
         service.getMyPermissions(
@@ -139,7 +195,7 @@ describe('UsersService', () => {
         ),
       ).resolves.toEqual({
         role: 'employee',
-        capabilities: [],
+        capabilities: ['announcements.list'],
         scope: { kind: 'none' },
         isPlatformAdmin: false,
       });

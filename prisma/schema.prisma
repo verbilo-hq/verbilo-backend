@@ -172,3 +172,21 @@ model AuditLog {
   @@index([tenantId, createdAt(sort: Desc)])
   @@index([actorUserId, createdAt(sort: Desc)])
 }
+
+model Announcement {
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @db.Uuid
+  authorId        String?   @db.Uuid
+  title           String
+  body            String
+  visibilityScope String
+  scopeSiteIds    String[]  @db.Uuid
+  pinned          Boolean   @default(false)
+  publishedAt     DateTime  @default(now())
+  expiresAt       DateTime?
+  deletedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([tenantId, publishedAt(sort: Desc)])
+}
