@@ -24,6 +24,7 @@ import { AdminUsersModule } from './admin/admin-users.module';
 import { StarterTemplatesModule } from './starter-templates/starter-templates.module';
 import { OnboardingModule } from './onboarding/onboarding.module';
 import { AnnouncementsModule } from './announcements/announcements.module';
+import { DocumentsModule } from './documents/documents.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { AnnouncementsModule } from './announcements/announcements.module';
     StarterTemplatesModule,
     OnboardingModule,
     AnnouncementsModule,
+    DocumentsModule,
     HealthModule,
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 60 }]),
   ],

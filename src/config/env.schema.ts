@@ -66,6 +66,11 @@ export const EnvSchema = z
     // need to set it explicitly.
     S3_LOGOS_REGION: z.string().min(1).default('eu-west-2'),
 
+    // Tenant document uploads. When unset, document upload/download APIs
+    // return 503 while the rest of the app continues to run.
+    S3_DOCS_BUCKET: z.string().min(1).optional(),
+    S3_DOCS_REGION: z.string().min(1).default('eu-west-2'),
+
     // NOTE: Also consumed in `src/instrument.ts` before Nest boots.
     SENTRY_DSN: z.string().url().optional(),
 

@@ -95,6 +95,9 @@ describe('UsersService', () => {
           'announcements.delete',
           'announcements.list',
           'audit.read',
+          'documents.delete',
+          'documents.list',
+          'documents.upload',
           'tenant.update',
           'tenant.update_branding',
           'users.assign_site',
@@ -120,6 +123,8 @@ describe('UsersService', () => {
         capabilities: [
           'announcements.create',
           'announcements.list',
+          'documents.list',
+          'documents.upload',
           'users.assign_site',
           'users.create',
           'users.delete',
@@ -147,6 +152,9 @@ describe('UsersService', () => {
           'announcements.delete',
           'announcements.list',
           'audit.read',
+          'documents.delete',
+          'documents.list',
+          'documents.upload',
           'tenant.update',
           'tenant.update_branding',
           'users.assign_site',
@@ -172,6 +180,8 @@ describe('UsersService', () => {
         capabilities: [
           'announcements.create',
           'announcements.list',
+          'documents.list',
+          'documents.upload',
           'users.create',
           'users.delete',
           'users.disable',
@@ -195,7 +205,7 @@ describe('UsersService', () => {
         ),
       ).resolves.toEqual({
         role: 'employee',
-        capabilities: ['announcements.list'],
+        capabilities: ['announcements.list', 'documents.list'],
         scope: { kind: 'none' },
         isPlatformAdmin: false,
       });
